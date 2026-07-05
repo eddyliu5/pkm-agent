@@ -1,0 +1,4031 @@
+{
+  "archetypes": {
+    "arboliva_ogerpon": {
+      "family": "grass",
+      "name": "Arboliva / Ogerpon",
+      "tags": [
+        "grass",
+        "stage1",
+        "ogerpon"
+      ]
+    },
+    "archaludon_metal": {
+      "family": "metal",
+      "name": "Archaludon Metal",
+      "tags": [
+        "metal",
+        "stage1",
+        "tempo",
+        "energy_recursion"
+      ]
+    },
+    "clefairy_ogerpon": {
+      "family": "grass_psychic",
+      "name": "Lillie's Clefairy / Ogerpon",
+      "tags": [
+        "grass",
+        "psychic",
+        "trainer_pokemon",
+        "box"
+      ]
+    },
+    "crustle_libraryout": {
+      "family": "fighting",
+      "name": "Crustle / Great Tusk Library-Out",
+      "tags": [
+        "control",
+        "deck_out",
+        "wall"
+      ]
+    },
+    "cynthia_garchomp": {
+      "family": "fighting_grass",
+      "name": "Cynthia's Garchomp ex",
+      "tags": [
+        "trainer_pokemon",
+        "stage2",
+        "fighting"
+      ]
+    },
+    "dragapult": {
+      "family": "dragon",
+      "name": "Dragapult ex",
+      "tags": [
+        "stage2",
+        "spread_damage",
+        "combo"
+      ]
+    },
+    "dragapult_blaziken": {
+      "family": "dragon_fire",
+      "name": "Dragapult / Blaziken",
+      "tags": [
+        "stage2",
+        "spread_damage",
+        "acceleration"
+      ]
+    },
+    "festival_lead": {
+      "family": "grass",
+      "name": "Festival Lead",
+      "tags": [
+        "grass",
+        "single_prize",
+        "search_engine"
+      ]
+    },
+    "grafaiai_control": {
+      "family": "darkness",
+      "name": "Grafaiai Control",
+      "tags": [
+        "darkness",
+        "control",
+        "team_rocket"
+      ]
+    },
+    "iono_bellibolt": {
+      "family": "lightning",
+      "name": "Iono's Bellibolt ex",
+      "tags": [
+        "trainer_pokemon",
+        "lightning",
+        "energy_acceleration"
+      ]
+    },
+    "mega_abomasnow": {
+      "family": "water",
+      "name": "Mega Abomasnow ex",
+      "tags": [
+        "mega_ex",
+        "water",
+        "energy_density",
+        "discard_top_deck"
+      ]
+    },
+    "mega_lucario": {
+      "family": "fighting",
+      "name": "Mega Lucario ex",
+      "tags": [
+        "mega_ex",
+        "fighting",
+        "tempo",
+        "energy_acceleration"
+      ]
+    },
+    "mega_sharpedo": {
+      "family": "darkness",
+      "name": "Mega Sharpedo ex",
+      "tags": [
+        "mega_ex",
+        "darkness",
+        "tempo"
+      ]
+    },
+    "mega_starmie": {
+      "family": "water",
+      "name": "Mega Starmie ex",
+      "tags": [
+        "mega_ex",
+        "water",
+        "tempo",
+        "bench_damage"
+      ]
+    },
+    "mega_venusaur": {
+      "family": "grass",
+      "name": "Mega Venusaur ex",
+      "tags": [
+        "mega_ex",
+        "grass",
+        "healing",
+        "energy_movement"
+      ]
+    },
+    "n_zoroark": {
+      "family": "darkness",
+      "name": "N's Zoroark ex",
+      "tags": [
+        "darkness",
+        "trainer_pokemon",
+        "stage1"
+      ]
+    },
+    "ogerpon_grass": {
+      "family": "grass",
+      "name": "Teal Mask Ogerpon Grass",
+      "tags": [
+        "grass",
+        "basic_ex",
+        "energy_acceleration"
+      ]
+    },
+    "raging_bolt_ogerpon": {
+      "family": "grass_lightning_fighting",
+      "name": "Raging Bolt / Ogerpon",
+      "tags": [
+        "basic_ex",
+        "multi_energy",
+        "ogerpon"
+      ]
+    },
+    "slowking": {
+      "family": "psychic",
+      "name": "Slowking",
+      "tags": [
+        "psychic",
+        "stage1",
+        "resource_loop"
+      ]
+    },
+    "starmie_froslass": {
+      "family": "water",
+      "name": "Mega Starmie / Mega Froslass",
+      "tags": [
+        "mega_ex",
+        "water",
+        "hand_size_punish"
+      ]
+    },
+    "steel_aggro": {
+      "family": "metal",
+      "name": "Steel Aggro",
+      "tags": [
+        "metal",
+        "basic_ex",
+        "aggro"
+      ]
+    },
+    "team_rocket_honchkrow": {
+      "family": "darkness",
+      "name": "Team Rocket's Honchkrow",
+      "tags": [
+        "darkness",
+        "team_rocket",
+        "control"
+      ]
+    },
+    "terastal_box": {
+      "family": "box",
+      "name": "Terastal Box",
+      "tags": [
+        "box",
+        "tera",
+        "multi_energy"
+      ]
+    }
+  },
+  "card_id_space": "Pokemon TCG AI Battle Challenge Simulation card ids from EN_Card_Data.csv / JP_Card_Data.csv",
+  "card_metadata_policy": "Deck card rows store only card id and count; resolve names, types, rules, attacks, and effects from the competition card CSV via pokemon_agent.card_db.",
+  "decks": [
+    {
+      "archetype": "arboliva_ogerpon",
+      "archetype_name": "Arboliva / Ogerpon",
+      "composition": {
+        "energy": 12,
+        "pokemon": 20,
+        "trainer": 28
+      },
+      "counts": [
+        {
+          "count": 12,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1094
+        },
+        {
+          "count": 4,
+          "id": 1261
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 96
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1231
+        },
+        {
+          "count": 2,
+          "id": 404
+        },
+        {
+          "count": 2,
+          "id": 918
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 917
+        },
+        {
+          "count": 2,
+          "id": 403
+        },
+        {
+          "count": 2,
+          "id": 710
+        },
+        {
+          "count": 2,
+          "id": 1071
+        },
+        {
+          "count": 2,
+          "id": 402
+        },
+        {
+          "count": 1,
+          "id": 1174
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 1116
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 1184
+        },
+        {
+          "count": 1,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 1152
+        },
+        {
+          "count": 1,
+          "id": 1219
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "city_league_arboliva",
+      "name": "City League Arboliva",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Arboliva_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 12,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 24,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "archaludon_metal",
+      "archetype_name": "Archaludon Metal",
+      "composition": {
+        "energy": 11,
+        "pokemon": 13,
+        "trainer": 36
+      },
+      "counts": [
+        {
+          "count": 11,
+          "id": 8
+        },
+        {
+          "count": 4,
+          "id": 190
+        },
+        {
+          "count": 4,
+          "id": 666
+        },
+        {
+          "count": 4,
+          "id": 169
+        },
+        {
+          "count": 4,
+          "id": 1185
+        },
+        {
+          "count": 4,
+          "id": 1244
+        },
+        {
+          "count": 4,
+          "id": 1147
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1122
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 1159
+        },
+        {
+          "count": 1,
+          "id": 1213
+        },
+        {
+          "count": 1,
+          "id": 57
+        }
+      ],
+      "id": "plamen_archaludon_metal_tempo",
+      "name": "Pokemon Steel Archaludon metal-tempo",
+      "notes": "Public Archaludon ex + Cinderace metal-tempo variant.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/plamen06_steel/pokemon-steel.ipynb",
+        "output_deck_path": "artifacts/kaggle_kernels/plamen06_steel_output/deck.csv",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/plamen06/pokemon-steel"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 5,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 16,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "clefairy_ogerpon",
+      "archetype_name": "Lillie's Clefairy / Ogerpon",
+      "composition": {
+        "energy": 15,
+        "pokemon": 19,
+        "trainer": 26
+      },
+      "counts": [
+        {
+          "count": 6,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1250
+        },
+        {
+          "count": 3,
+          "id": 5
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 1116
+        },
+        {
+          "count": 3,
+          "id": 272
+        },
+        {
+          "count": 3,
+          "id": 1071
+        },
+        {
+          "count": 3,
+          "id": 11
+        },
+        {
+          "count": 3,
+          "id": 96
+        },
+        {
+          "count": 3,
+          "id": 19
+        },
+        {
+          "count": 2,
+          "id": 1198
+        },
+        {
+          "count": 2,
+          "id": 184
+        },
+        {
+          "count": 2,
+          "id": 1227
+        },
+        {
+          "count": 2,
+          "id": 1172
+        },
+        {
+          "count": 2,
+          "id": 756
+        },
+        {
+          "count": 1,
+          "id": 1210
+        },
+        {
+          "count": 1,
+          "id": 758
+        },
+        {
+          "count": 1,
+          "id": 209
+        },
+        {
+          "count": 1,
+          "id": 1188
+        },
+        {
+          "count": 1,
+          "id": 1205
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 75
+        },
+        {
+          "count": 1,
+          "id": 1213
+        },
+        {
+          "count": 1,
+          "id": 849
+        },
+        {
+          "count": 1,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 858
+        },
+        {
+          "count": 1,
+          "id": 1080
+        },
+        {
+          "count": 1,
+          "id": 1146
+        }
+      ],
+      "id": "city_league_clefairyogerpon",
+      "name": "City League ClefairyOgerpon",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/ClefairyOgerpon_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 18,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 29,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "crustle_libraryout",
+      "archetype_name": "Crustle / Great Tusk Library-Out",
+      "composition": {
+        "energy": 8,
+        "pokemon": 13,
+        "trainer": 39
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 1182
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 345
+        },
+        {
+          "count": 4,
+          "id": 344
+        },
+        {
+          "count": 4,
+          "id": 1185
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 58
+        },
+        {
+          "count": 4,
+          "id": 11
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1122
+        },
+        {
+          "count": 4,
+          "id": 20
+        },
+        {
+          "count": 4,
+          "id": 1123
+        },
+        {
+          "count": 4,
+          "id": 1197
+        },
+        {
+          "count": 2,
+          "id": 1194
+        },
+        {
+          "count": 2,
+          "id": 1204
+        },
+        {
+          "count": 1,
+          "id": 1147
+        },
+        {
+          "count": 1,
+          "id": 1247
+        },
+        {
+          "count": 1,
+          "id": 607
+        },
+        {
+          "count": 1,
+          "id": 1121
+        }
+      ],
+      "id": "soutasakurai_crustle_great_tusk_libraryout",
+      "name": "LibraryOut w/ Crustle & Great Tusk",
+      "notes": "Public library-out/control deck table.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/soutasakurai_crustle_libraryout/max-elo-1208-libraryout-w-crustle-great-tusk.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/soutasakurai/max-elo-1208-libraryout-w-crustle-great-tusk"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 19,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "cynthia_garchomp",
+      "archetype_name": "Cynthia's Garchomp ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 21,
+        "trainer": 31
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1182
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 380
+        },
+        {
+          "count": 4,
+          "id": 379
+        },
+        {
+          "count": 4,
+          "id": 1173
+        },
+        {
+          "count": 4,
+          "id": 341
+        },
+        {
+          "count": 4,
+          "id": 342
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 3,
+          "id": 381
+        },
+        {
+          "count": 3,
+          "id": 20
+        },
+        {
+          "count": 2,
+          "id": 1225
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 1228
+        },
+        {
+          "count": 1,
+          "id": 387
+        },
+        {
+          "count": 1,
+          "id": 10
+        },
+        {
+          "count": 1,
+          "id": 1122
+        },
+        {
+          "count": 1,
+          "id": 858
+        },
+        {
+          "count": 1,
+          "id": 1203
+        }
+      ],
+      "id": "city_league_garchomp",
+      "name": "City League Garchomp",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Garchomp_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 21,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "cynthia_garchomp",
+      "archetype_name": "Cynthia's Garchomp ex",
+      "composition": {
+        "energy": 9,
+        "pokemon": 19,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "count": 5,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1182
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 380
+        },
+        {
+          "count": 4,
+          "id": 379
+        },
+        {
+          "count": 4,
+          "id": 1173
+        },
+        {
+          "count": 4,
+          "id": 341
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 20
+        },
+        {
+          "count": 3,
+          "id": 381
+        },
+        {
+          "count": 3,
+          "id": 342
+        },
+        {
+          "count": 3,
+          "id": 1142
+        },
+        {
+          "count": 2,
+          "id": 1206
+        },
+        {
+          "count": 2,
+          "id": 1122
+        },
+        {
+          "count": 2,
+          "id": 1141
+        },
+        {
+          "count": 1,
+          "id": 387
+        },
+        {
+          "count": 1,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1219
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "masamikobayashi_cynthia_garchomp_sample",
+      "name": "Masami Kobayashi Cynthia's Garchomp ex",
+      "notes": "Public Cynthia/Garchomp sample inspired by a Prague 2026 list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/masamikobayashi_cynthia_garchomp/a-sample-cynthia-garchomp-ex-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/masamikobayashi/a-sample-cynthia-garchomp-ex-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 20,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult",
+      "archetype_name": "Dragapult ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 23,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 120
+        },
+        {
+          "count": 4,
+          "id": 119
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 5
+        },
+        {
+          "count": 3,
+          "id": 2
+        },
+        {
+          "count": 3,
+          "id": 121
+        },
+        {
+          "count": 3,
+          "id": 1079
+        },
+        {
+          "count": 2,
+          "id": 7
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 235
+        },
+        {
+          "count": 2,
+          "id": 131
+        },
+        {
+          "count": 2,
+          "id": 1071
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 1201
+        },
+        {
+          "count": 1,
+          "id": 1198
+        },
+        {
+          "count": 1,
+          "id": 132
+        },
+        {
+          "count": 1,
+          "id": 133
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 172
+        },
+        {
+          "count": 1,
+          "id": 112
+        },
+        {
+          "count": 1,
+          "id": 173
+        },
+        {
+          "count": 1,
+          "id": 1260
+        },
+        {
+          "count": 1,
+          "id": 1240
+        },
+        {
+          "count": 1,
+          "id": 1256
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "city_league_dragapult",
+      "name": "City League Dragapult",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Dragapult_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 13,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 28,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult",
+      "archetype_name": "Dragapult ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 16,
+        "trainer": 36
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 5
+        },
+        {
+          "count": 4,
+          "id": 2
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 1198
+        },
+        {
+          "count": 4,
+          "id": 1120
+        },
+        {
+          "count": 4,
+          "id": 120
+        },
+        {
+          "count": 4,
+          "id": 119
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 121
+        },
+        {
+          "count": 3,
+          "id": 1152
+        },
+        {
+          "count": 2,
+          "id": 1210
+        },
+        {
+          "count": 2,
+          "id": 235
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1079
+        },
+        {
+          "count": 2,
+          "id": 1256
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 184
+        },
+        {
+          "count": 1,
+          "id": 1156
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "kiyotah_dragapult_sample",
+      "name": "Kiyota sample Dragapult ex",
+      "notes": "Pinned public Kaggle rule-based sample deck.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/kiyotah_dragapult_sample/a-sample-rule-based-agent-dragapult-ex-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/kiyotah/a-sample-rule-based-agent-dragapult-ex-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult",
+      "archetype_name": "Dragapult ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 16,
+        "trainer": 36
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 5
+        },
+        {
+          "count": 4,
+          "id": 2
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 1198
+        },
+        {
+          "count": 4,
+          "id": 1120
+        },
+        {
+          "count": 4,
+          "id": 120
+        },
+        {
+          "count": 4,
+          "id": 119
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 121
+        },
+        {
+          "count": 3,
+          "id": 1152
+        },
+        {
+          "count": 2,
+          "id": 1210
+        },
+        {
+          "count": 2,
+          "id": 235
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1079
+        },
+        {
+          "count": 2,
+          "id": 1256
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 184
+        },
+        {
+          "count": 1,
+          "id": 1156
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "skarin_dragapult_phantom_dive",
+      "name": "Phantom Dive or Go Home Dragapult ex",
+      "notes": "Public Dragapult ex submission deck.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/skarin_dragapult/phantom-dive-or-go-home-a-dragapult-ex-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/skarin/phantom-dive-or-go-home-a-dragapult-ex-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult_blaziken",
+      "archetype_name": "Dragapult / Blaziken",
+      "composition": {
+        "energy": 8,
+        "pokemon": 23,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 120
+        },
+        {
+          "count": 4,
+          "id": 119
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 5
+        },
+        {
+          "count": 3,
+          "id": 2
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 1152
+        },
+        {
+          "count": 3,
+          "id": 1079
+        },
+        {
+          "count": 2,
+          "id": 7
+        },
+        {
+          "count": 2,
+          "id": 326
+        },
+        {
+          "count": 2,
+          "id": 1231
+        },
+        {
+          "count": 2,
+          "id": 121
+        },
+        {
+          "count": 2,
+          "id": 1246
+        },
+        {
+          "count": 2,
+          "id": 112
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 410
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 411
+        },
+        {
+          "count": 1,
+          "id": 1198
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 272
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 858
+        },
+        {
+          "count": 1,
+          "id": 343
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "city_league_dragapultblaziken",
+      "name": "City League DragapultBlaziken",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/DragapultBlaziken_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 14,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 27,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "festival_lead",
+      "archetype_name": "Festival Lead",
+      "composition": {
+        "energy": 5,
+        "pokemon": 23,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "count": 5,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 92
+        },
+        {
+          "count": 4,
+          "id": 1094
+        },
+        {
+          "count": 4,
+          "id": 93
+        },
+        {
+          "count": 4,
+          "id": 1245
+        },
+        {
+          "count": 4,
+          "id": 89
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 90
+        },
+        {
+          "count": 3,
+          "id": 1213
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1175
+        },
+        {
+          "count": 2,
+          "id": 1086
+        },
+        {
+          "count": 1,
+          "id": 1174
+        },
+        {
+          "count": 1,
+          "id": 1211
+        },
+        {
+          "count": 1,
+          "id": 100
+        },
+        {
+          "count": 1,
+          "id": 1191
+        },
+        {
+          "count": 1,
+          "id": 1184
+        },
+        {
+          "count": 1,
+          "id": 1158
+        },
+        {
+          "count": 1,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 858
+        },
+        {
+          "count": 1,
+          "id": 74
+        },
+        {
+          "count": 1,
+          "id": 73
+        },
+        {
+          "count": 1,
+          "id": 91
+        },
+        {
+          "count": 1,
+          "id": 1129
+        },
+        {
+          "count": 1,
+          "id": 240
+        },
+        {
+          "count": 1,
+          "id": 343
+        }
+      ],
+      "id": "city_league_festivallead",
+      "name": "City League FestivalLead",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/FestivalLead_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 12,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 27,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "grafaiai_control",
+      "archetype_name": "Grafaiai Control",
+      "composition": {
+        "energy": 9,
+        "pokemon": 21,
+        "trainer": 30
+      },
+      "counts": [
+        {
+          "count": 9,
+          "id": 7
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 112
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1219
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 1086
+        },
+        {
+          "count": 3,
+          "id": 646
+        },
+        {
+          "count": 3,
+          "id": 1097
+        },
+        {
+          "count": 3,
+          "id": 1079
+        },
+        {
+          "count": 3,
+          "id": 1259
+        },
+        {
+          "count": 2,
+          "id": 104
+        },
+        {
+          "count": 2,
+          "id": 648
+        },
+        {
+          "count": 2,
+          "id": 647
+        },
+        {
+          "count": 2,
+          "id": 860
+        },
+        {
+          "count": 1,
+          "id": 1174
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 858
+        },
+        {
+          "count": 1,
+          "id": 343
+        },
+        {
+          "count": 1,
+          "id": 122
+        },
+        {
+          "count": 1,
+          "id": 1137
+        },
+        {
+          "count": 1,
+          "id": 1080
+        },
+        {
+          "count": 1,
+          "id": 689
+        }
+      ],
+      "id": "city_league_grafaiai",
+      "name": "City League Grafaiai",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Grafaiai_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 15,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 24,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "iono_bellibolt",
+      "archetype_name": "Iono's Bellibolt ex",
+      "composition": {
+        "energy": 22,
+        "pokemon": 15,
+        "trainer": 23
+      },
+      "counts": [
+        {
+          "count": 22,
+          "id": 4
+        },
+        {
+          "count": 4,
+          "id": 1233
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 3,
+          "id": 1086
+        },
+        {
+          "count": 3,
+          "id": 269
+        },
+        {
+          "count": 3,
+          "id": 271
+        },
+        {
+          "count": 3,
+          "id": 268
+        },
+        {
+          "count": 3,
+          "id": 265
+        },
+        {
+          "count": 3,
+          "id": 270
+        },
+        {
+          "count": 3,
+          "id": 1254
+        },
+        {
+          "count": 3,
+          "id": 1121
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1152
+        },
+        {
+          "count": 1,
+          "id": 1118
+        },
+        {
+          "count": 1,
+          "id": 1110
+        }
+      ],
+      "id": "kiyotah_iono_sample",
+      "name": "Kiyota sample Iono's Bellibolt ex",
+      "notes": "Pinned public Kaggle rule-based sample deck.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/kiyotah_iono_sample/a-sample-rule-based-agent-iono-s-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/kiyotah/a-sample-rule-based-agent-iono-s-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 15,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_abomasnow",
+      "archetype_name": "Mega Abomasnow ex",
+      "composition": {
+        "energy": 34,
+        "pokemon": 10,
+        "trainer": 16
+      },
+      "counts": [
+        {
+          "count": 34,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 723
+        },
+        {
+          "count": 4,
+          "id": 722
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1262
+        },
+        {
+          "count": 2,
+          "id": 721
+        },
+        {
+          "count": 1,
+          "id": 1126
+        }
+      ],
+      "id": "kiyotah_mega_abomasnow_sample",
+      "name": "Kiyota sample Mega Abomasnow ex",
+      "notes": "Pinned public Kaggle rule-based sample deck.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/kiyotah_abomasnow/a-sample-rule-based-agent-mega-abomasnow-ex-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/kiyotah/a-sample-rule-based-agent-mega-abomasnow-ex-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 6,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 9,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_abomasnow",
+      "archetype_name": "Mega Abomasnow ex",
+      "composition": {
+        "energy": 35,
+        "pokemon": 10,
+        "trainer": 15
+      },
+      "counts": [
+        {
+          "count": 35,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 723
+        },
+        {
+          "count": 4,
+          "id": 1145
+        },
+        {
+          "count": 4,
+          "id": 722
+        },
+        {
+          "count": 4,
+          "id": 1235
+        },
+        {
+          "count": 2,
+          "id": 1205
+        },
+        {
+          "count": 2,
+          "id": 721
+        },
+        {
+          "count": 1,
+          "id": 1158
+        }
+      ],
+      "id": "local_kaggle_sample_abomasnow",
+      "name": "Bundled Kaggle sample Mega Abomasnow ex",
+      "notes": "Deck bundled in the competition sample_submission.",
+      "source": {
+        "path": "data/pokemon-tcg-ai-battle/pokemon-tcg-ai-battle/sample_submission/sample_submission/deck.csv",
+        "type": "local_file"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 6,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 9,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_abomasnow",
+      "archetype_name": "Mega Abomasnow ex",
+      "composition": {
+        "energy": 38,
+        "pokemon": 10,
+        "trainer": 12
+      },
+      "counts": [
+        {
+          "count": 38,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 723
+        },
+        {
+          "count": 4,
+          "id": 722
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1262
+        },
+        {
+          "count": 2,
+          "id": 1192
+        },
+        {
+          "count": 2,
+          "id": 721
+        },
+        {
+          "count": 2,
+          "id": 1227
+        },
+        {
+          "count": 1,
+          "id": 1126
+        }
+      ],
+      "id": "makimakiai_abomasnow_water38",
+      "name": "Mega Abomasnow ex Water-38 Gamble",
+      "notes": "Public dataset-backed Abomasnow deck with 38 Water-energy gamble plan.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/makimakiai_abomasnow_water38/abomasnow_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/makimakiai/mega-abomasnow-ex-water-38-gamble-agent",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/makimakiai/ptcg-abomasnow-water38-agent-inputs"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 6,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 9,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 10,
+        "pokemon": 17,
+        "trainer": 33
+      },
+      "counts": [
+        {
+          "count": 10,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 4,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 1192
+        },
+        {
+          "count": 3,
+          "id": 678
+        },
+        {
+          "count": 3,
+          "id": 1152
+        },
+        {
+          "count": 3,
+          "id": 1121
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 1213
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 2,
+          "id": 1229
+        },
+        {
+          "count": 1,
+          "id": 1174
+        },
+        {
+          "count": 1,
+          "id": 1182
+        },
+        {
+          "count": 1,
+          "id": 117
+        },
+        {
+          "count": 1,
+          "id": 1252
+        },
+        {
+          "count": 1,
+          "id": 1159
+        },
+        {
+          "count": 1,
+          "id": 858
+        }
+      ],
+      "id": "city_league_megalucario",
+      "name": "City League MegaLucario",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/MegaLucario_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 12,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 23,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 13,
+        "pokemon": 16,
+        "trainer": 31
+      },
+      "counts": [
+        {
+          "count": 13,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1102
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 678
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 3,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1252
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1159
+        }
+      ],
+      "id": "kiyotah_mega_lucario_sample",
+      "name": "Kiyota sample Mega Lucario ex",
+      "notes": "Pinned public Kaggle rule-based sample deck.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/kiyotah_lucario_sample/a-sample-rule-based-agent-mega-lucario-ex-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/kiyotah/a-sample-rule-based-agent-mega-lucario-ex-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 17,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 13,
+        "pokemon": 16,
+        "trainer": 31
+      },
+      "counts": [
+        {
+          "count": 13,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1102
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 678
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 3,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1252
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1159
+        }
+      ],
+      "id": "local_mega_lucario_sample",
+      "name": "Local Mega Lucario ex sample",
+      "notes": "Current project sample deck and baseline config deck.",
+      "source": {
+        "path": "sample/mega-lucario-ex/deck.csv",
+        "type": "local_file"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 17,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 14,
+        "pokemon": 17,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 14,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1102
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 678
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 4,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1152
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1252
+        },
+        {
+          "count": 1,
+          "id": 1159
+        }
+      ],
+      "id": "local_mega_lucario_v62",
+      "name": "Local Mega Lucario ex v62",
+      "notes": "Local v62 tweak used by current config.",
+      "source": {
+        "path": "sample/mega-lucario-v62/deck.csv",
+        "type": "local_file"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 17,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 14,
+        "pokemon": 17,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 14,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1102
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 678
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 4,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1152
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1252
+        },
+        {
+          "count": 1,
+          "id": 1159
+        }
+      ],
+      "id": "pixiux_mega_lucario_v62",
+      "name": "PTCG Mega Lucario ex v62",
+      "notes": "Public v62 Lucario variant.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/pixiux_ptcg-mega-lucario-ex-v62/ptcg-mega-lucario-ex-v62.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/pixiux/ptcg-mega-lucario-ex-v62"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 17,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_lucario",
+      "archetype_name": "Mega Lucario ex",
+      "composition": {
+        "energy": 14,
+        "pokemon": 17,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 14,
+          "id": 6
+        },
+        {
+          "count": 4,
+          "id": 1192
+        },
+        {
+          "count": 4,
+          "id": 1102
+        },
+        {
+          "count": 4,
+          "id": 1142
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 678
+        },
+        {
+          "count": 4,
+          "id": 1141
+        },
+        {
+          "count": 4,
+          "id": 677
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 676
+        },
+        {
+          "count": 2,
+          "id": 674
+        },
+        {
+          "count": 2,
+          "id": 675
+        },
+        {
+          "count": 2,
+          "id": 673
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1252
+        },
+        {
+          "count": 1,
+          "id": 1159
+        },
+        {
+          "count": 1,
+          "id": 1213
+        },
+        {
+          "count": 1,
+          "id": 1152
+        }
+      ],
+      "id": "pixiux_mega_lucario_v63_judge",
+      "name": "PTCG Mega Lucario ex v63 Judge tech",
+      "notes": "v63 swaps one Poke Pad slot into Judge anti-control tech.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/pixiux_lucario_v63/ptcg-mega-lucario-ex-v63.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/pixiux/ptcg-mega-lucario-ex-v63"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 18,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_sharpedo",
+      "archetype_name": "Mega Sharpedo ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 20,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "count": 8,
+          "id": 7
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 827
+        },
+        {
+          "count": 4,
+          "id": 1213
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1182
+        },
+        {
+          "count": 3,
+          "id": 828
+        },
+        {
+          "count": 2,
+          "id": 1162
+        },
+        {
+          "count": 2,
+          "id": 1185
+        },
+        {
+          "count": 2,
+          "id": 112
+        },
+        {
+          "count": 2,
+          "id": 141
+        },
+        {
+          "count": 2,
+          "id": 122
+        },
+        {
+          "count": 2,
+          "id": 833
+        },
+        {
+          "count": 2,
+          "id": 834
+        },
+        {
+          "count": 1,
+          "id": 848
+        },
+        {
+          "count": 1,
+          "id": 1252
+        },
+        {
+          "count": 1,
+          "id": 849
+        },
+        {
+          "count": 1,
+          "id": 1145
+        },
+        {
+          "count": 1,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 1256
+        },
+        {
+          "count": 1,
+          "id": 1080
+        },
+        {
+          "count": 1,
+          "id": 689
+        }
+      ],
+      "id": "city_league_megasharpedo",
+      "name": "City League MegaSharpedo",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/MegaSharpedo_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 14,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 24,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_starmie",
+      "archetype_name": "Mega Starmie ex",
+      "composition": {
+        "energy": 10,
+        "pokemon": 16,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "count": 5,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 1225
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1260
+        },
+        {
+          "count": 4,
+          "id": 1030
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 7
+        },
+        {
+          "count": 3,
+          "id": 1031
+        },
+        {
+          "count": 3,
+          "id": 1122
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 132
+        },
+        {
+          "count": 2,
+          "id": 131
+        },
+        {
+          "count": 2,
+          "id": 17
+        },
+        {
+          "count": 2,
+          "id": 112
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 133
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 1088
+        },
+        {
+          "count": 1,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1229
+        }
+      ],
+      "id": "city_league_megastarmie",
+      "name": "City League MegaStarmie",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/MegaStarmie_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 23,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_starmie",
+      "archetype_name": "Mega Starmie ex",
+      "composition": {
+        "energy": 13,
+        "pokemon": 12,
+        "trainer": 35
+      },
+      "counts": [
+        {
+          "count": 9,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 666
+        },
+        {
+          "count": 4,
+          "id": 1120
+        },
+        {
+          "count": 4,
+          "id": 17
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1145
+        },
+        {
+          "count": 4,
+          "id": 1122
+        },
+        {
+          "count": 4,
+          "id": 1189
+        },
+        {
+          "count": 4,
+          "id": 1030
+        },
+        {
+          "count": 3,
+          "id": 1031
+        },
+        {
+          "count": 3,
+          "id": 1229
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 1159
+        },
+        {
+          "count": 1,
+          "id": 1225
+        },
+        {
+          "count": 1,
+          "id": 1129
+        },
+        {
+          "count": 1,
+          "id": 1121
+        }
+      ],
+      "id": "map1e_starmie_cinderace_budew",
+      "name": "Starmie / Cinderace / Budew fast tempo",
+      "notes": "Public markdown deck table from notebook.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/map1e_starmie_cinderace_budew/starmie-cinderace-budew-skill-agent.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/map1e114514/starmie-cinderace-budew-skill-agent"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 5,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 19,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_venusaur",
+      "archetype_name": "Mega Venusaur ex",
+      "composition": {
+        "energy": 10,
+        "pokemon": 18,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "count": 10,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1094
+        },
+        {
+          "count": 4,
+          "id": 1261
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 96
+        },
+        {
+          "count": 3,
+          "id": 1219
+        },
+        {
+          "count": 2,
+          "id": 709
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 650
+        },
+        {
+          "count": 2,
+          "id": 708
+        },
+        {
+          "count": 2,
+          "id": 651
+        },
+        {
+          "count": 2,
+          "id": 652
+        },
+        {
+          "count": 2,
+          "id": 710
+        },
+        {
+          "count": 2,
+          "id": 1071
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1229
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 1110
+        },
+        {
+          "count": 1,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1197
+        }
+      ],
+      "id": "city_league_megavenusaur",
+      "name": "City League MegaVenusaur",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/MegaVenusaur_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_venusaur",
+      "archetype_name": "Mega Venusaur ex",
+      "composition": {
+        "energy": 12,
+        "pokemon": 18,
+        "trainer": 30
+      },
+      "counts": [
+        {
+          "count": 12,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1094
+        },
+        {
+          "count": 4,
+          "id": 650
+        },
+        {
+          "count": 4,
+          "id": 1261
+        },
+        {
+          "count": 4,
+          "id": 651
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1122
+        },
+        {
+          "count": 4,
+          "id": 96
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 4,
+          "id": 1229
+        },
+        {
+          "count": 3,
+          "id": 652
+        },
+        {
+          "count": 3,
+          "id": 1123
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 178
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 1126
+        }
+      ],
+      "id": "yukichacha_mega_venusaur_v2",
+      "name": "Mega Venusaur ex Deck V2",
+      "notes": "Public Mega Venusaur v2 hard-coded deck list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yukichacha_venusaur_v2/mega-venusaur-ex-deck-v2-rule-based-agent.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/yukichacha0227/mega-venusaur-ex-deck-v2-rule-based-agent"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 16,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "n_zoroark",
+      "archetype_name": "N's Zoroark ex",
+      "composition": {
+        "energy": 8,
+        "pokemon": 19,
+        "trainer": 33
+      },
+      "counts": [
+        {
+          "count": 8,
+          "id": 7
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 293
+        },
+        {
+          "count": 4,
+          "id": 292
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 3,
+          "id": 1205
+        },
+        {
+          "count": 3,
+          "id": 1113
+        },
+        {
+          "count": 2,
+          "id": 1162
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 906
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1253
+        },
+        {
+          "count": 2,
+          "id": 258
+        },
+        {
+          "count": 2,
+          "id": 257
+        },
+        {
+          "count": 2,
+          "id": 1121
+        },
+        {
+          "count": 1,
+          "id": 1211
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 1195
+        },
+        {
+          "count": 1,
+          "id": 1213
+        },
+        {
+          "count": 1,
+          "id": 112
+        },
+        {
+          "count": 1,
+          "id": 303
+        },
+        {
+          "count": 1,
+          "id": 141
+        },
+        {
+          "count": 1,
+          "id": 1088
+        },
+        {
+          "count": 1,
+          "id": 1256
+        }
+      ],
+      "id": "city_league_zoroark",
+      "name": "City League Zoroark",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Zoroark_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 13,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 26,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "ogerpon_grass",
+      "archetype_name": "Teal Mask Ogerpon Grass",
+      "composition": {
+        "energy": 12,
+        "pokemon": 12,
+        "trainer": 36
+      },
+      "counts": [
+        {
+          "count": 12,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1182
+        },
+        {
+          "count": 4,
+          "id": 1094
+        },
+        {
+          "count": 4,
+          "id": 1119
+        },
+        {
+          "count": 4,
+          "id": 95
+        },
+        {
+          "count": 4,
+          "id": 96
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1118
+        },
+        {
+          "count": 3,
+          "id": 1185
+        },
+        {
+          "count": 3,
+          "id": 1123
+        },
+        {
+          "count": 2,
+          "id": 1174
+        },
+        {
+          "count": 2,
+          "id": 1181
+        },
+        {
+          "count": 2,
+          "id": 1139
+        },
+        {
+          "count": 2,
+          "id": 174
+        },
+        {
+          "count": 2,
+          "id": 140
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 1183
+        },
+        {
+          "count": 1,
+          "id": 1088
+        }
+      ],
+      "id": "pcxxxxxx_legal_ogerpon_grass",
+      "name": "Explainable legal Ogerpon grass baseline",
+      "notes": "Public legal Ogerpon baseline deck reconstructed from exact card-name count dict.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/pcxxxxxx_ogerpon/explainable-ptcg-agent-with-legal-ogerpon-deck.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/pcxxxxxx/explainable-ptcg-agent-with-legal-ogerpon-deck"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 12,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 18,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "raging_bolt_ogerpon",
+      "archetype_name": "Raging Bolt / Ogerpon",
+      "composition": {
+        "energy": 15,
+        "pokemon": 18,
+        "trainer": 27
+      },
+      "counts": [
+        {
+          "count": 8,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1198
+        },
+        {
+          "count": 4,
+          "id": 96
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1250
+        },
+        {
+          "count": 3,
+          "id": 6
+        },
+        {
+          "count": 3,
+          "id": 4
+        },
+        {
+          "count": 3,
+          "id": 63
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1094
+        },
+        {
+          "count": 2,
+          "id": 1205
+        },
+        {
+          "count": 2,
+          "id": 1116
+        },
+        {
+          "count": 2,
+          "id": 75
+        },
+        {
+          "count": 2,
+          "id": 1213
+        },
+        {
+          "count": 2,
+          "id": 756
+        },
+        {
+          "count": 2,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 5
+        },
+        {
+          "count": 1,
+          "id": 1264
+        },
+        {
+          "count": 1,
+          "id": 44
+        },
+        {
+          "count": 1,
+          "id": 1188
+        },
+        {
+          "count": 1,
+          "id": 1118
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 1098
+        },
+        {
+          "count": 1,
+          "id": 184
+        },
+        {
+          "count": 1,
+          "id": 272
+        },
+        {
+          "count": 1,
+          "id": 1097
+        },
+        {
+          "count": 1,
+          "id": 171
+        },
+        {
+          "count": 1,
+          "id": 1080
+        }
+      ],
+      "id": "city_league_ragingbolt",
+      "name": "City League RagingBolt",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/RagingBolt_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 18,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 28,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "slowking",
+      "archetype_name": "Slowking",
+      "composition": {
+        "energy": 10,
+        "pokemon": 18,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "count": 5,
+          "id": 5
+        },
+        {
+          "count": 4,
+          "id": 1248
+        },
+        {
+          "count": 4,
+          "id": 1225
+        },
+        {
+          "count": 4,
+          "id": 1097
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 162
+        },
+        {
+          "count": 4,
+          "id": 19
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1227
+        },
+        {
+          "count": 3,
+          "id": 163
+        },
+        {
+          "count": 3,
+          "id": 1146
+        },
+        {
+          "count": 2,
+          "id": 144
+        },
+        {
+          "count": 2,
+          "id": 184
+        },
+        {
+          "count": 2,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 224
+        },
+        {
+          "count": 1,
+          "id": 1182
+        },
+        {
+          "count": 1,
+          "id": 1192
+        },
+        {
+          "count": 1,
+          "id": 1188
+        },
+        {
+          "count": 1,
+          "id": 1194
+        },
+        {
+          "count": 1,
+          "id": 13
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 550
+        },
+        {
+          "count": 1,
+          "id": 1184
+        },
+        {
+          "count": 1,
+          "id": 183
+        },
+        {
+          "count": 1,
+          "id": 1203
+        },
+        {
+          "count": 1,
+          "id": 377
+        }
+      ],
+      "id": "city_league_slowking",
+      "name": "City League Slowking",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Slowking_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 13,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 26,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "starmie_froslass",
+      "archetype_name": "Mega Starmie / Mega Froslass",
+      "composition": {
+        "energy": 12,
+        "pokemon": 14,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "count": 9,
+          "id": 3
+        },
+        {
+          "count": 4,
+          "id": 1086
+        },
+        {
+          "count": 4,
+          "id": 1119
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1189
+        },
+        {
+          "count": 4,
+          "id": 860
+        },
+        {
+          "count": 4,
+          "id": 1030
+        },
+        {
+          "count": 3,
+          "id": 861
+        },
+        {
+          "count": 3,
+          "id": 1031
+        },
+        {
+          "count": 3,
+          "id": 1122
+        },
+        {
+          "count": 3,
+          "id": 1229
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1252
+        },
+        {
+          "count": 2,
+          "id": 1225
+        },
+        {
+          "count": 2,
+          "id": 1145
+        },
+        {
+          "count": 2,
+          "id": 1123
+        },
+        {
+          "count": 1,
+          "id": 1211
+        },
+        {
+          "count": 1,
+          "id": 17
+        },
+        {
+          "count": 1,
+          "id": 12
+        },
+        {
+          "count": 1,
+          "id": 11
+        },
+        {
+          "count": 1,
+          "id": 1097
+        }
+      ],
+      "id": "limitless_ashleysandlin_starmie_froslass",
+      "name": "ashleysandlin Starmie / Froslass",
+      "notes": "Limitless Redacted Heroes 2nd Chance #6 list cited by public Kaggle Starmie notebook.",
+      "source": {
+        "cited_by": "https://www.kaggle.com/code/masamikobayashi/prize-card-tracking-1300-starmie",
+        "type": "limitless_decklist",
+        "url": "https://play.limitlesstcg.com/tournament/69e4f71948d465883f718047/player/ashleysandlin/decklist"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 8,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 21,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "team_rocket_honchkrow",
+      "archetype_name": "Team Rocket's Honchkrow",
+      "composition": {
+        "energy": 8,
+        "pokemon": 12,
+        "trainer": 40
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 17
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1077
+        },
+        {
+          "count": 4,
+          "id": 1217
+        },
+        {
+          "count": 4,
+          "id": 1216
+        },
+        {
+          "count": 4,
+          "id": 15
+        },
+        {
+          "count": 4,
+          "id": 1257
+        },
+        {
+          "count": 4,
+          "id": 1218
+        },
+        {
+          "count": 4,
+          "id": 463
+        },
+        {
+          "count": 4,
+          "id": 1219
+        },
+        {
+          "count": 4,
+          "id": 1220
+        },
+        {
+          "count": 4,
+          "id": 1134
+        },
+        {
+          "count": 3,
+          "id": 891
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 414
+        },
+        {
+          "count": 2,
+          "id": 473
+        },
+        {
+          "count": 1,
+          "id": 1109
+        },
+        {
+          "count": 1,
+          "id": 474
+        },
+        {
+          "count": 1,
+          "id": 1121
+        }
+      ],
+      "id": "city_league_honchkrow",
+      "name": "City League Honchkrow",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/Honchkrow_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 8,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 19,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "terastal_box",
+      "archetype_name": "Terastal Box",
+      "composition": {
+        "energy": 9,
+        "pokemon": 22,
+        "trainer": 29
+      },
+      "counts": [
+        {
+          "count": 4,
+          "id": 1
+        },
+        {
+          "count": 4,
+          "id": 1227
+        },
+        {
+          "count": 4,
+          "id": 1152
+        },
+        {
+          "count": 4,
+          "id": 1121
+        },
+        {
+          "count": 3,
+          "id": 1250
+        },
+        {
+          "count": 3,
+          "id": 1198
+        },
+        {
+          "count": 3,
+          "id": 172
+        },
+        {
+          "count": 3,
+          "id": 173
+        },
+        {
+          "count": 2,
+          "id": 5
+        },
+        {
+          "count": 2,
+          "id": 1182
+        },
+        {
+          "count": 2,
+          "id": 1116
+        },
+        {
+          "count": 2,
+          "id": 174
+        },
+        {
+          "count": 2,
+          "id": 184
+        },
+        {
+          "count": 2,
+          "id": 272
+        },
+        {
+          "count": 2,
+          "id": 1097
+        },
+        {
+          "count": 2,
+          "id": 96
+        },
+        {
+          "count": 2,
+          "id": 108
+        },
+        {
+          "count": 1,
+          "id": 4
+        },
+        {
+          "count": 1,
+          "id": 8
+        },
+        {
+          "count": 1,
+          "id": 3
+        },
+        {
+          "count": 1,
+          "id": 1201
+        },
+        {
+          "count": 1,
+          "id": 235
+        },
+        {
+          "count": 1,
+          "id": 209
+        },
+        {
+          "count": 1,
+          "id": 1205
+        },
+        {
+          "count": 1,
+          "id": 1119
+        },
+        {
+          "count": 1,
+          "id": 140
+        },
+        {
+          "count": 1,
+          "id": 756
+        },
+        {
+          "count": 1,
+          "id": 1071
+        },
+        {
+          "count": 1,
+          "id": 210
+        },
+        {
+          "count": 1,
+          "id": 1165
+        },
+        {
+          "count": 1,
+          "id": 1127
+        }
+      ],
+      "id": "city_league_terastalbox",
+      "name": "City League TerastalBox",
+      "notes": "Community compilation of Japanese City League 1st/2nd place archetype list.",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/yu0307_16_city_decks/TerastalBox_deck.csv",
+        "notebook_url": "https://www.kaggle.com/code/yu0307/16-real-city-league-top-cut-decks-deck-csv",
+        "title": "16 Real City League Top-Cut Decks deck.csv",
+        "type": "kaggle_dataset",
+        "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 19,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 31,
+        "valid": true
+      }
+    }
+  ],
+  "generated_at": "2026-07-05",
+  "purpose": "Seed deck/archetype database for self-play opponent pools and in-game opponent deck inference.",
+  "rejected_sources": [
+    {
+      "id": "manderson_steel_aggro_zacian",
+      "name": "Pokemon TCG Steel Aggro 20260625",
+      "source": {
+        "local_path": "artifacts/kaggle_kernels/manderson_steel_aggro/pokemon-tcg-steel-aggro-20260625-1923.ipynb",
+        "type": "kaggle_kernel",
+        "url": "https://www.kaggle.com/code/manderson240/pokemon-tcg-steel-aggro-20260625-1923"
+      },
+      "validation": {
+        "ace_spec_count": 15,
+        "basic_pokemon_count": 8,
+        "card_count": 60,
+        "problems": [
+          "more than 1 ACE SPEC card: 15"
+        ],
+        "unique_card_ids": 18,
+        "valid": false
+      }
+    }
+  ],
+  "schema_version": 2,
+  "sources": [
+    {
+      "type": "kaggle_competition",
+      "url": "https://www.kaggle.com/competitions/pokemon-tcg-ai-battle/code"
+    },
+    {
+      "type": "kaggle_dataset",
+      "url": "https://www.kaggle.com/datasets/yu0307/deck-csv"
+    },
+    {
+      "type": "kaggle_dataset",
+      "url": "https://www.kaggle.com/datasets/makimakiai/ptcg-abomasnow-water38-agent-inputs"
+    },
+    {
+      "type": "limitless_decklist",
+      "url": "https://play.limitlesstcg.com/tournament/69e4f71948d465883f718047/player/ashleysandlin/decklist"
+    },
+    {
+      "paths": [
+        "sample/",
+        "data/pokemon-tcg-ai-battle/pokemon-tcg-ai-battle/sample_submission/sample_submission/deck.csv"
+      ],
+      "type": "local_files"
+    }
+  ]
+}

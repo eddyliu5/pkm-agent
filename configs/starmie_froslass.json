@@ -1,0 +1,19 @@
+{
+  "name": "starmie_froslass",
+  "deck_path": "sample/starmie-froslass/deck.csv",
+  "deck_plan_type": "setup_big_attacker",
+  "card_ids": {},
+  "main_attackers": [1031, 861, 1030],
+  "main_line": [103, 860, 861, 1030, 1031],
+  "backup_attackers": [860],
+  "setup_basics": [860, 1030],
+  "key_evolutions": [861, 1031],
+  "search_cards": [1086, 1119, 1145],
+  "draw_cards": [1227],
+  "gust_cards": [1182],
+  "switch_cards": [1123],
+  "energy_cards": [3, 17, 12, 11],
+  "damage_boost_cards": [],
+  "tool_cards": [],
+  "notes": "Default sequence-agent deck promoted from deck_db limitless_ashleysandlin_starmie_froslass after validation against heuristic mirror and random deck-db opponents."
+}

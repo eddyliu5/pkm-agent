@@ -1,0 +1,30 @@
+# macOS / editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Local environment files
+.env
+.env.*
+.python-version
+
+# Generated training/evaluation/submission artifacts
+artifacts/
+
+# Large/local Kaggle competition bundle.
+# Keep data/deck_db tracked; fetch or unpack the simulator bundle locally.
+data/pokemon-tcg-ai-battle/
