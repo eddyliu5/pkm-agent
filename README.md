@@ -48,6 +48,127 @@ Run the batch validation/package flow:
 ./.venv/bin/python -m pokemon_agent.overnight --baseline-games 100
 ```
 
+## Replay Imitation And Self-Play
+
+Fetch top-team replay JSON with the Kaggle CLI after joining the competition and configuring Kaggle credentials:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline fetch \
+  --competition <competition-slug> \
+  --out-dir artifacts/replays/kaggle \
+  --top-teams 20 \
+  --episodes-per-submission 50
+```
+
+Convert replay decisions into sequence labels. This matches each high-Elo selected action against simulator-generated candidate sequences and stores the candidate feature set plus the expert label:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline labels \
+  artifacts/replays/kaggle \
+  --output artifacts/replay_labels/high_elo_sequence_labels.jsonl \
+  --min-rating 1400 \
+  --beam-width 32 \
+  --max-depth 12 \
+  --max-nodes 512
+```
+
+Pretrain the sequence scorer with imitation learning:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain \
+  --labels artifacts/replay_labels/high_elo_sequence_labels.jsonl \
+  --out-dir artifacts/checkpoints/replay_pretrain \
+  --epochs 5
+```
+
+Pretrain the dependency-light MLP sequence ranker on the same candidate-label JSONL:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain-mlp \
+  --labels artifacts/replay_labels/high_elo_sequence_labels.jsonl \
+  --out-dir artifacts/checkpoints/mlp_ranker \
+  --epochs 5 \
+  --hidden-dim 128 \
+  --max-features 256
+```
+
+The MLP checkpoint is a JSON file with its feature vocabulary, input normalization stats, and weights. It is intentionally framework-free so it can be loaded later without adding PyTorch or TensorFlow to the submission bundle.
+
+For larger notebook/GPU training runs, train with PyTorch and export the same framework-free JSON checkpoint:
+
+```bash
+python -m pokemon_agent.torch_mlp_trainer \
+  --labels artifacts/replay_labels/high_elo_sequence_labels.top16.compact.jsonl \
+  --out-dir artifacts/checkpoints/torch_mlp_ranker \
+  --epochs 20 \
+  --hidden-dim 128 \
+  --max-features 256 \
+  --batch-size 512 \
+  --device auto
+```
+
+`torch_mlp_trainer` requires PyTorch only in the training environment. The exported `best.json` still loads through the standard `MLPSequenceRanker`, so the Kaggle submission remains dependency-light.
+
+Fine-tune the MLP ranker with self-play returns:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline self-play-mlp \
+  --model artifacts/checkpoints/mlp_ranker/best.json \
+  --out-dir artifacts/checkpoints/mlp_self_play \
+  --games 5000 \
+  --checkpoint-every 250
+```
+
+Evaluate an MLP checkpoint:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent heuristic --games 100
+./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent random --games 100 --opponent-decks deck_db
+```
+
+Evaluate an MLP checkpoint on top of learned sequence weights:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_high_elo/best.json,artifacts/checkpoints/replay_pretrain_top_sample/best.json \
+  --opponent heuristic \
+  --games 100
+```
+
+Build an MLP submission:
+
+```bash
+./.venv/bin/python -m pokemon_agent.submission \
+  --mlp-model artifacts/checkpoints/mlp_self_play/best.json \
+  --output artifacts/submission/mlp_sequence_submission.tar.gz
+```
+
+Build a combined sequence-weight plus MLP submission:
+
+```bash
+./.venv/bin/python -m pokemon_agent.submission \
+  --weights artifacts/checkpoints/replay_pretrain_top_sample/best.json \
+  --mlp-model artifacts/checkpoints/mlp_ranker_high_elo/best.json \
+  --output artifacts/submission/mlp_sequence_submission.tar.gz
+```
+
+Fine-tune with sequence-feature self-play returns:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline self-play \
+  --weights artifacts/checkpoints/replay_pretrain/best.json \
+  --out-dir artifacts/checkpoints/sequence_self_play \
+  --games 5000 \
+  --checkpoint-every 250
+```
+
+Evaluate a trained checkpoint:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval --agent sequence:artifacts/checkpoints/sequence_self_play/best.json --opponent heuristic --games 100
+./.venv/bin/python -m pokemon_agent.eval --agent sequence:artifacts/checkpoints/sequence_self_play/best.json --opponent random --games 100 --opponent-decks deck_db
+```
+
 ## Notes
 
 - `train_linear.py` and `LinearQPolicy` are retained as lightweight baseline/ablation infrastructure, not as part of the default sequence-agent workflow.

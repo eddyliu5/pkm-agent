@@ -13,7 +13,8 @@ from .evaluators import ResourceSnapshot, ThreatSnapshot
 from .features import combine_feature_dicts, default_weights, extract_action_features, score_features
 from .game_plan import PlanContext
 from .knowledge import CardKnowledgeStore
-from .state import AgentState, build_agent_state
+from .mlp_ranker import MLPSequenceRanker
+from .state import AgentState, PokemonView, build_agent_state
 
 from .cg_loader import ensure_cg_path
 
@@ -229,21 +230,65 @@ class SequenceFeaturizer:
             elif sequence.state.result not in (-1, 2, root_state.player_index):
                 features["seq_terminal_loss"] = 1.0
 
-        pooled = self._pooled_card_embedding(sequence)
-        for index, value in enumerate(pooled[:12]):
+        pooled = self._pooled_card_embedding(root_state, sequence)
+        for index, value in enumerate(pooled):
             features[f"card_embed_{index}"] = value
+        attended = self._field_attention_embedding(root_state, sequence)
+        for index, value in enumerate(attended):
+            features[f"field_card_attn_{index}"] = value
         return features
 
-    def _pooled_card_embedding(self, sequence: CandidateSequence) -> tuple[float, ...]:
+    def _pooled_card_embedding(self, root_state: AgentState, sequence: CandidateSequence) -> tuple[float, ...]:
+        vectors = self._action_card_vectors(root_state, sequence)
+        return self._mean_vector(vectors)
+
+    def _action_card_vectors(self, root_state: AgentState, sequence: CandidateSequence) -> list[tuple[float, ...]]:
         vectors: list[tuple[float, ...]] = []
         for step in sequence.steps:
             for action in step.actions:
                 if action.source_card_id is not None:
                     vectors.append(self.knowledge.vector(action.source_card_id))
+                elif action.is_attack and root_state.my_active is not None:
+                    vectors.append(self.knowledge.vector(root_state.my_active.id))
                 if action.target_card_id is not None:
                     vectors.append(self.knowledge.vector(action.target_card_id))
+        return vectors
+
+    def _field_attention_embedding(self, root_state: AgentState, sequence: CandidateSequence) -> tuple[float, ...]:
+        query = self._mean_vector(self._action_card_vectors(root_state, sequence))
+        field_vectors = [self.knowledge.vector(card_id) for card_id in self._visible_in_play_card_ids(root_state)]
+        if not field_vectors or not any(query):
+            return self._zero_vector()
+
+        scale = math.sqrt(float(len(query))) or 1.0
+        scores = [sum(q * k for q, k in zip(query, vector)) / scale for vector in field_vectors]
+        best = max(scores)
+        weights = [math.exp(max(-40.0, min(40.0, score - best))) for score in scores]
+        total = sum(weights) or 1.0
+        values = [0.0] * len(field_vectors[0])
+        for weight, vector in zip(weights, field_vectors):
+            normalized_weight = weight / total
+            for index, value in enumerate(vector):
+                values[index] += normalized_weight * value
+        return tuple(values)
+
+    def _visible_in_play_card_ids(self, state: AgentState) -> tuple[int, ...]:
+        ids: list[int] = []
+        if state.stadium_id is not None:
+            ids.append(state.stadium_id)
+        for pokemon in ([state.my_active] if state.my_active else []) + list(state.my_bench):
+            ids.extend(self._pokemon_in_play_card_ids(pokemon))
+        for pokemon in ([state.opp_active] if state.opp_active else []) + list(state.opp_bench):
+            ids.extend(self._pokemon_in_play_card_ids(pokemon))
+        return tuple(ids)
+
+    @staticmethod
+    def _pokemon_in_play_card_ids(pokemon: PokemonView) -> tuple[int, ...]:
+        return (pokemon.id,) + pokemon.energy_ids + pokemon.tool_ids
+
+    def _mean_vector(self, vectors: list[tuple[float, ...]]) -> tuple[float, ...]:
         if not vectors:
-            return (0.0,) * 12
+            return self._zero_vector()
         dim = len(vectors[0])
         values = [0.0] * dim
         for vector in vectors:
@@ -252,15 +297,34 @@ class SequenceFeaturizer:
         scale = 1.0 / float(len(vectors))
         return tuple(value * scale for value in values)
 
+    def _zero_vector(self) -> tuple[float, ...]:
+        return self.knowledge.vector(None)
+
 
 class SequenceScorer:
-    def __init__(self, weights: dict[str, float] | None = None):
+    def __init__(
+        self,
+        weights: dict[str, float] | None = None,
+        *,
+        mlp_ranker: MLPSequenceRanker | None = None,
+        linear_weight: float = 1.0,
+        mlp_weight: float = 5.0,
+    ):
         self.weights = default_sequence_weights()
         if weights:
             self.weights.update({str(key): float(value) for key, value in weights.items()})
+        self.mlp_ranker = mlp_ranker
+        self.linear_weight = float(linear_weight)
+        self.mlp_weight = float(mlp_weight)
 
     def score(self, features: dict[str, float]) -> float:
-        return score_features(features, self.weights)
+        linear_score = score_features(features, self.weights)
+        features["linear_score"] = linear_score
+        if self.mlp_ranker is None:
+            return linear_score
+        mlp_score = self.mlp_ranker.score_features(features)
+        features["mlp_score"] = mlp_score
+        return (self.linear_weight * linear_score) + (self.mlp_weight * mlp_score)
 
 
 class ValueModel:

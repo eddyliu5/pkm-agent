@@ -8,6 +8,7 @@ from .belief import BeliefBuilder
 from .evaluators import ResourceEvaluator, ThreatEvaluator
 from .game_plan import GamePlanManager
 from .knowledge import CardKnowledgeStore
+from .mlp_ranker import MLPSequenceRanker
 from .policy import LinearQPolicy
 from .sequence import (
     ActionSelector,
@@ -38,6 +39,9 @@ class DecisionEngine:
         deck: list[int],
         config: dict[str, Any],
         weights: dict[str, float] | None = None,
+        mlp_ranker: MLPSequenceRanker | None = None,
+        linear_score_weight: float = 1.0,
+        mlp_score_weight: float = 5.0,
         search_config: SequenceSearchConfig | None = None,
         seed: int | None = None,
     ):
@@ -52,47 +56,58 @@ class DecisionEngine:
         self.knowledge = CardKnowledgeStore(config)
         self.simulator = FeasibleSequenceSimulator(config=config, weights=weights)
         self.featurizer = SequenceFeaturizer(config=config, knowledge=self.knowledge)
-        self.scorer = SequenceScorer(weights=weights)
+        self.scorer = SequenceScorer(
+            weights=weights,
+            mlp_ranker=mlp_ranker,
+            linear_weight=linear_score_weight,
+            mlp_weight=mlp_score_weight,
+        )
         self.value_model = ValueModel()
         self.selector = ActionSelector(seed=seed)
         self.last_trace: DecisionTrace | None = None
+        self.last_chosen_sequence: CandidateSequence | None = None
 
     def choose(self, obs: Any, mode: str = "eval") -> list[int]:
         if obs.select is None:
+            self.last_chosen_sequence = None
             return []
         try:
             return self._choose_sequence(obs, mode=mode)
         except Exception:
             return self._fallback_choose(obs)
 
-    def _choose_sequence(self, obs: Any, mode: str) -> list[int]:
+    def score_sequences(self, obs: Any) -> list[CandidateSequence]:
         actions = legal_actions(obs)
         if obs.current is None or not actions:
-            return self._fallback_choose(obs)
+            return []
         root_state = build_agent_state(obs, actions=actions)
         belief = self.beliefs.build(obs, root_state)
         plan = self.plans.build(root_state)
         resources = self.resources.evaluate(root_state)
         threat = self.threats.evaluate(root_state, belief.opponent)
         sequences = self.simulator.generate(obs, root_state, belief, self.search_config)
-        if not sequences:
-            return self._fallback_choose(obs)
-
         scored: list[CandidateSequence] = []
         for sequence in sequences:
             sequence.features = self.featurizer.featurize(root_state, sequence, belief, plan, resources, threat)
             sequence.features["value_model_score"] = self.value_model.evaluate(root_state, sequence.state)
             sequence.score = self.scorer.score(sequence.features)
             scored.append(sequence)
+        return scored
 
-        chosen = self.selector.select(scored, mode=mode)
+    def _choose_sequence(self, obs: Any, mode: str) -> list[int]:
+        sequences = self.score_sequences(obs)
+        if not sequences:
+            return self._fallback_choose(obs)
+
+        chosen = self.selector.select(sequences, mode=mode)
         if chosen is None:
             return self._fallback_choose(obs)
         fallback_selected, _ = sanitize_selection(obs, self.fallback.choose(obs))
-        if mode == "eval" and self._fallback_is_safer(chosen, scored, fallback_selected):
+        if mode == "eval" and self._fallback_is_safer(chosen, sequences, fallback_selected):
+            self.last_chosen_sequence = None
             self.last_trace = DecisionTrace(
-                sequence_count=len(scored),
-                used_search=any(sequence.used_search for sequence in scored),
+                sequence_count=len(sequences),
+                used_search=any(sequence.used_search for sequence in sequences),
                 chosen_score=0.0,
                 chosen_labels=("fallback_guardrail",),
             )
@@ -100,9 +115,10 @@ class DecisionEngine:
         selected, invalid = sanitize_selection(obs, chosen.first_selection)
         if invalid:
             return self._fallback_choose(obs)
+        self.last_chosen_sequence = chosen
         self.last_trace = DecisionTrace(
-            sequence_count=len(scored),
-            used_search=any(sequence.used_search for sequence in scored),
+            sequence_count=len(sequences),
+            used_search=any(sequence.used_search for sequence in sequences),
             chosen_score=chosen.score,
             chosen_labels=tuple(label for step in chosen.steps for label in step.labels),
         )
@@ -129,6 +145,7 @@ class DecisionEngine:
 
     def _fallback_choose(self, obs: Any) -> list[int]:
         selected, _invalid = sanitize_selection(obs, self.fallback.choose(obs))
+        self.last_chosen_sequence = None
         self.last_trace = DecisionTrace(
             sequence_count=0,
             used_search=False,

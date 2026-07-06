@@ -11,7 +11,11 @@ from .config import DEFAULT_CONFIG, read_deck
 from .features import default_weights
 
 
-def build_submission(weights_path: str | None = None, output: str = "artifacts/submission/submission.tar.gz") -> Path:
+def build_submission(
+    weights_path: str | None = None,
+    mlp_model_path: str | None = None,
+    output: str = "artifacts/submission/submission.tar.gz",
+) -> Path:
     output_path = Path(output)
     if not output_path.is_absolute():
         output_path = PROJECT_ROOT / output_path
@@ -33,6 +37,8 @@ def build_submission(weights_path: str | None = None, output: str = "artifacts/s
         weights = default_weights()
     with (build_dir / "weights.json").open("w", encoding="utf-8") as fh:
         json.dump({"weights": weights}, fh, indent=2, sort_keys=True)
+    if mlp_model_path:
+        shutil.copy2(Path(mlp_model_path), build_dir / "mlp_model.json")
 
     (build_dir / "main.py").write_text("from pokemon_agent.runtime_agent import agent\n", encoding="utf-8")
     ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc")
@@ -62,9 +68,10 @@ def build_submission(weights_path: str | None = None, output: str = "artifacts/s
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build Kaggle submission bundle.")
     parser.add_argument("--weights", default=None)
+    parser.add_argument("--mlp-model", default=None)
     parser.add_argument("--output", default="artifacts/submission/submission.tar.gz")
     args = parser.parse_args()
-    build_submission(weights_path=args.weights, output=args.output)
+    build_submission(weights_path=args.weights, mlp_model_path=args.mlp_model, output=args.output)
 
 
 if __name__ == "__main__":

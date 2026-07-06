@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from types import SimpleNamespace
+import json
 import tempfile
 import tarfile
 import subprocess
@@ -16,7 +17,9 @@ from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_de
 from .engine import run_episode
 from .eval import _opponent_deck_pool
 from .features import extract_action_features
-from .policy import HeuristicPolicy, RandomPolicy, SequencePolicy
+from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
+from .policy import HeuristicPolicy, RandomPolicy, SequencePolicy, make_policy
+from .replay_pipeline import build_label_dataset, compact_label_dataset, pretrain_sequence_scorer, rl_self_play_mlp
 from .sequence import SequenceSearchConfig
 from .state import build_agent_state
 from .submission import build_submission
@@ -244,6 +247,99 @@ def test_sequence_policy_episode_smoke() -> None:
     assert result.invalid_actions == 0
 
 
+def test_replay_pipeline_smoke() -> None:
+    config = load_config()
+    deck = read_deck(config=config)
+    obs_dict, _ = battle_start(deck, deck)
+    try:
+        obs = to_observation_class(obs_dict)
+        selected = HeuristicPolicy(config=config).choose(obs)
+    finally:
+        battle_finish()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        replay_path = tmp_path / "episode-1-replay.json"
+        labels_path = tmp_path / "labels.jsonl"
+        replay_path.write_text(
+            json.dumps(
+                {
+                    "id": "synthetic",
+                    "info": {"publicScore": 1800},
+                    "steps": [[{"observation": obs_dict, "action": selected, "reward": 0, "status": "ACTIVE"}]],
+                }
+            ),
+            encoding="utf-8",
+        )
+        label_summary = build_label_dataset(
+            [str(replay_path)],
+            output=str(labels_path),
+            max_examples=1,
+            beam_width=2,
+            max_depth=2,
+            max_nodes=16,
+            time_budget_ms=250,
+        )
+        assert label_summary["examples"] == 1
+        assert label_summary["matched"] == 1
+        compact_path = tmp_path / "compact_labels.jsonl"
+        compact_summary = compact_label_dataset(str(labels_path), output=str(compact_path))
+        assert compact_summary["output_records"] == 1
+        assert compact_summary["candidate_count"] > 0
+        compact_record = json.loads(compact_path.read_text(encoding="utf-8").splitlines()[0])
+        assert set(compact_record) == {"candidates", "label_index", "matched"}
+
+        train_summary = pretrain_sequence_scorer(str(labels_path), out_dir=str(tmp_path / "pretrain"), epochs=1, lr=0.001)
+        assert train_summary["examples"] == 1
+        assert Path(train_summary["latest_checkpoint"]).exists()
+
+        mlp_summary = pretrain_mlp_ranker(
+            str(labels_path),
+            out_dir=str(tmp_path / "mlp_pretrain"),
+            epochs=1,
+            lr=0.001,
+            hidden_dim=4,
+            max_features=32,
+            max_examples=1,
+            seed=7,
+        )
+        assert mlp_summary["examples"] == 1
+        assert mlp_summary["feature_count"] > 0
+        mlp_path = Path(mlp_summary["latest_checkpoint"])
+        assert mlp_path.exists()
+        model = MLPSequenceRanker.from_file(mlp_path)
+        record = json.loads(labels_path.read_text(encoding="utf-8").splitlines()[0])
+        scores = model.score_batch([candidate["features"] for candidate in record["candidates"]])
+        assert len(scores) == len(record["candidates"])
+        assert all(isinstance(score, float) for score in scores)
+
+        rl_summary = rl_self_play_mlp(
+            1,
+            model_path=str(mlp_path),
+            out_dir=str(tmp_path / "mlp_self_play"),
+            lr=0.0001,
+            epsilon_start=0.0,
+            epsilon_end=0.0,
+            checkpoint_every=1,
+        )
+        assert rl_summary["games"] == 1
+        assert rl_summary["invalid_actions"] == 0
+        assert Path(rl_summary["latest_checkpoint"]).exists()
+
+        combined = make_policy(f"sequence-mlp:{mlp_path},{train_summary['latest_checkpoint']}", config=config, seed=9)
+        assert isinstance(combined, SequencePolicy)
+
+        bundled = build_submission(
+            weights_path=train_summary["latest_checkpoint"],
+            mlp_model_path=str(mlp_path),
+            output=str(tmp_path / "mlp_submission.tar.gz"),
+        )
+        with tarfile.open(bundled, "r:gz") as tar:
+            names = set(tar.getnames())
+        assert "mlp_model.json" in names
+        assert "weights.json" in names
+
+
 def main() -> None:
     test_action_state_reward_smoke()
     test_episode_smoke()
@@ -255,6 +351,7 @@ def main() -> None:
     test_prize_tracker_deck_reveal_infers_known_prizes()
     test_sequence_decision_engine_smoke()
     test_sequence_policy_episode_smoke()
+    test_replay_pipeline_smoke()
     print("smoke tests passed")
 
 

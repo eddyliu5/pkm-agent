@@ -8,6 +8,7 @@ from typing import Any
 from .actions import ActionView, legal_actions
 from .config import load_config, read_deck
 from .features import default_weights, extract_action_features, score_features
+from .mlp_ranker import MLPSequenceRanker
 from .state import build_agent_state
 
 
@@ -90,6 +91,10 @@ class SequencePolicy(Policy):
         weights: dict[str, float] | None = None,
         config: dict | None = None,
         deck: list[int] | None = None,
+        mlp_ranker: MLPSequenceRanker | None = None,
+        mlp_model_path: str | Path | None = None,
+        linear_score_weight: float = 1.0,
+        mlp_score_weight: float = 5.0,
         seed: int | None = None,
     ):
         from .decision_engine import DecisionEngine
@@ -97,10 +102,15 @@ class SequencePolicy(Policy):
 
         self.config = config or load_config()
         self.deck = deck or read_deck(config=self.config)
+        if mlp_ranker is None and mlp_model_path is not None:
+            mlp_ranker = MLPSequenceRanker.from_file(mlp_model_path)
         self.engine = DecisionEngine(
             deck=self.deck,
             config=self.config,
             weights=weights,
+            mlp_ranker=mlp_ranker,
+            linear_score_weight=linear_score_weight,
+            mlp_score_weight=mlp_score_weight,
             search_config=SequenceSearchConfig(beam_width=8, max_depth=8, max_nodes=128, time_budget_ms=500),
             seed=seed,
         )
@@ -127,6 +137,19 @@ def make_policy(spec: str, config: dict | None = None, seed: int | None = None) 
     if spec.startswith("sequence:"):
         cfg = config or load_config()
         return SequencePolicy(weights=load_weights(spec.split(":", 1)[1]), config=cfg, deck=read_deck(config=cfg), seed=seed)
+    if spec.startswith("sequence-mlp:"):
+        cfg = config or load_config()
+        payload = spec.split(":", 1)[1]
+        if "," in payload:
+            mlp_path, weights_path = payload.split(",", 1)
+            return SequencePolicy(
+                weights=load_weights(weights_path),
+                mlp_model_path=mlp_path,
+                config=cfg,
+                deck=read_deck(config=cfg),
+                seed=seed,
+            )
+        return SequencePolicy(mlp_model_path=payload, config=cfg, deck=read_deck(config=cfg), seed=seed)
     if spec.startswith("linear:"):
         return LinearQPolicy.from_file(spec.split(":", 1)[1], config=config)
     if spec.endswith(".json"):

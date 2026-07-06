@@ -7,6 +7,7 @@ from pathlib import Path
 from .cg_loader import ensure_cg_path
 from .config import load_config
 from .decision_engine import DecisionEngine
+from .mlp_ranker import MLPSequenceRanker
 from .sequence import SequenceSearchConfig
 
 ensure_cg_path()
@@ -42,6 +43,13 @@ def _load_weights(root: Path) -> dict[str, float]:
     return {str(key): float(value) for key, value in weights.items()}
 
 
+def _load_mlp_ranker(root: Path) -> MLPSequenceRanker | None:
+    path = root / "mlp_model.json"
+    if not path.exists():
+        return None
+    return MLPSequenceRanker.from_file(path)
+
+
 ROOT = _agent_root()
 DECK = _read_deck(ROOT)
 try:
@@ -55,10 +63,12 @@ except FileNotFoundError:
         except FileNotFoundError:
             CONFIG = load_config()
 WEIGHTS = _load_weights(ROOT)
+MLP_RANKER = _load_mlp_ranker(ROOT)
 ENGINE = DecisionEngine(
     deck=DECK,
     config=CONFIG,
     weights=WEIGHTS,
+    mlp_ranker=MLP_RANKER,
     search_config=SequenceSearchConfig(beam_width=8, max_depth=8, max_nodes=128, time_budget_ms=500),
 )
 

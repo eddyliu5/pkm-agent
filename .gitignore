@@ -28,3 +28,4 @@ artifacts/
 # Large/local Kaggle competition bundle.
 # Keep data/deck_db tracked; fetch or unpack the simulator bundle locally.
 data/pokemon-tcg-ai-battle/
+data/kaggle_replays/
