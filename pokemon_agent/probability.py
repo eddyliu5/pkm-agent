@@ -130,6 +130,9 @@ class ProbabilitySnapshot:
     p_key_evolution_unavailable: float = 0.0
     p_energy_unavailable: float = 0.0
     p_search_target_unavailable: float = 0.0
+    p_main_attacker_in_deck: float = 0.0
+    p_key_evolution_in_deck: float = 0.0
+    p_energy_in_deck: float = 0.0
     p_energy_draw_next_card: float = 0.0
     p_energy_access_this_turn: float = 0.0
     p_energy_access_next_turn: float = 0.0
@@ -154,6 +157,9 @@ class ProbabilitySnapshot:
             "p_key_evolution_unavailable": self.p_key_evolution_unavailable,
             "p_energy_unavailable": self.p_energy_unavailable,
             "p_search_target_unavailable": self.p_search_target_unavailable,
+            "p_main_attacker_in_deck": self.p_main_attacker_in_deck,
+            "p_key_evolution_in_deck": self.p_key_evolution_in_deck,
+            "p_energy_in_deck": self.p_energy_in_deck,
             "p_energy_draw_next_card": self.p_energy_draw_next_card,
             "p_energy_access_this_turn": self.p_energy_access_this_turn,
             "p_energy_access_next_turn": self.p_energy_access_next_turn,
@@ -177,6 +183,7 @@ class ProbabilityModel:
         known_prized: Counter[int],
         unknown_prize_pool: Counter[int],
         unknown_prize_count: int,
+        known_deck_counts: Counter[int] | None = None,
     ) -> ProbabilitySnapshot:
         main_attackers = _ids(self.config.get("main_attackers"))
         key_evolutions = _ids(self.config.get("key_evolutions")) or main_attackers
@@ -227,20 +234,68 @@ class ProbabilityModel:
         search_in_hand = _count_group(hand, search_cards)
         draw_in_hand = _count_group(hand, _ids(self.config.get("draw_cards")))
         energy_in_hand = _count_group(hand, energy_cards)
-        expected_energy_in_deck = self._expected_group_in_deck(energy_cards, unknown_prize_pool, total_unknown, unknown_prizes)
-        p_energy_draw_next_card = _prob_draw_from_deck(expected_energy_in_deck, state.my_deck_count, 1)
+
+        p_main_in_deck = self._prob_group_in_deck(
+            main_attackers,
+            unknown_prize_pool,
+            total_unknown,
+            unknown_prizes,
+            state.my_deck_count,
+            known_deck_counts,
+        )
+        p_evolution_in_deck = self._prob_group_in_deck(
+            key_evolutions,
+            unknown_prize_pool,
+            total_unknown,
+            unknown_prizes,
+            state.my_deck_count,
+            known_deck_counts,
+        )
+        p_energy_in_deck = self._prob_group_in_deck(
+            energy_cards,
+            unknown_prize_pool,
+            total_unknown,
+            unknown_prizes,
+            state.my_deck_count,
+            known_deck_counts,
+        )
+
+        p_energy_draw_next_card = self._prob_draw_group_from_deck(
+            energy_cards,
+            unknown_prize_pool,
+            total_unknown,
+            unknown_prizes,
+            state.my_deck_count,
+            1,
+            known_deck_counts,
+        )
         next_turn_draws = 1 + (2 if draw_in_hand > 0 else 0)
-        p_energy_draw_next_turn = _prob_draw_from_deck(expected_energy_in_deck, state.my_deck_count, next_turn_draws)
+        p_energy_draw_next_turn = self._prob_draw_group_from_deck(
+            energy_cards,
+            unknown_prize_pool,
+            total_unknown,
+            unknown_prizes,
+            state.my_deck_count,
+            next_turn_draws,
+            known_deck_counts,
+        )
 
         p_search_available = 1.0 if search_in_hand > 0 else 0.0
-        p_energy_access_this_turn = max(1.0 if energy_in_hand > 0 else 0.0, p_search_available * (1.0 - p_energy_unavailable))
+        p_energy_access_this_turn = max(1.0 if energy_in_hand > 0 else 0.0, p_search_available * p_energy_in_deck)
         p_energy_access_next_turn = 1.0 - ((1.0 - p_energy_access_this_turn) * (1.0 - p_energy_draw_next_turn))
 
-        p_main_access = self._group_access_probability(main_attackers, hand, in_play, p_main_unavailable)
-        p_evolution_access = self._group_access_probability(key_evolutions, hand, in_play, p_evolution_unavailable)
+        p_main_access = self._group_access_probability(main_attackers, hand, in_play, p_main_in_deck)
+        p_evolution_access = self._group_access_probability(key_evolutions, hand, in_play, p_evolution_in_deck)
         p_line_this_turn = p_main_access * p_evolution_access * p_energy_access_this_turn
         p_line_next_turn = p_main_access * p_evolution_access * p_energy_access_next_turn
-        p_search_target_unavailable = max(p_main_unavailable, p_evolution_unavailable, p_energy_unavailable)
+        search_unavailable_parts: list[float] = []
+        if main_attackers:
+            search_unavailable_parts.append(1.0 - p_main_access)
+        if key_evolutions:
+            search_unavailable_parts.append(1.0 - p_evolution_access)
+        if energy_cards:
+            search_unavailable_parts.append(1.0 - (1.0 if energy_in_hand > 0 else p_energy_in_deck))
+        p_search_target_unavailable = max(search_unavailable_parts, default=0.0)
 
         return ProbabilitySnapshot(
             unknown_pool_frac=min(1.0, float(total_unknown) / 60.0),
@@ -254,6 +309,9 @@ class ProbabilityModel:
             p_key_evolution_unavailable=p_evolution_unavailable,
             p_energy_unavailable=p_energy_unavailable,
             p_search_target_unavailable=p_search_target_unavailable,
+            p_main_attacker_in_deck=p_main_in_deck,
+            p_key_evolution_in_deck=p_evolution_in_deck,
+            p_energy_in_deck=p_energy_in_deck,
             p_energy_draw_next_card=p_energy_draw_next_card,
             p_energy_access_this_turn=_clamp01(p_energy_access_this_turn),
             p_energy_access_next_turn=_clamp01(p_energy_access_next_turn),
@@ -312,10 +370,61 @@ class ProbabilityModel:
         successes = _count_group(unknown_prize_pool, card_ids)
         return max(0.0, float(successes) - _expected_prized(successes, total_unknown, unknown_prizes))
 
+    def _prob_draw_group_from_deck(
+        self,
+        card_ids: set[int],
+        unknown_prize_pool: Counter[int],
+        total_unknown: int,
+        unknown_prizes: int,
+        deck_count: int,
+        draws: int,
+        known_deck_counts: Counter[int] | None,
+    ) -> float:
+        known_successes = self._known_deck_successes(card_ids, known_deck_counts, deck_count)
+        if known_successes is not None:
+            return hypergeometric_at_least_one(deck_count, known_successes, draws)
+        expected_successes = self._expected_group_in_deck(card_ids, unknown_prize_pool, total_unknown, unknown_prizes)
+        return _prob_draw_from_deck(expected_successes, deck_count, draws)
+
+    def _prob_group_in_deck(
+        self,
+        card_ids: set[int],
+        unknown_prize_pool: Counter[int],
+        total_unknown: int,
+        unknown_prizes: int,
+        deck_count: int,
+        known_deck_counts: Counter[int] | None,
+    ) -> float:
+        if not card_ids or deck_count <= 0:
+            return 0.0
+        known_successes = self._known_deck_successes(card_ids, known_deck_counts, deck_count)
+        if known_successes is not None:
+            return 1.0 if known_successes > 0 else 0.0
+
+        total_unknown = int(total_unknown)
+        unknown_prizes = max(0, min(int(unknown_prizes), total_unknown))
+        successes = _count_group(unknown_prize_pool, card_ids)
+        if total_unknown <= 0 or unknown_prizes >= total_unknown or successes <= 0:
+            return 0.0
+        if successes > unknown_prizes:
+            return 1.0
+
+        p_all_unknown_copies_prized = hypergeometric_pmf(total_unknown, successes, unknown_prizes, successes)
+        return _clamp01(1.0 - p_all_unknown_copies_prized)
+
     @staticmethod
-    def _group_access_probability(card_ids: set[int], hand: Counter[int], in_play: Counter[int], p_unavailable: float) -> float:
+    def _known_deck_successes(card_ids: set[int], known_deck_counts: Counter[int] | None, deck_count: int) -> int | None:
+        deck_count = max(0, int(deck_count))
+        if not card_ids or deck_count <= 0 or not known_deck_counts:
+            return None
+        if sum(known_deck_counts.values()) != deck_count:
+            return None
+        return max(0, min(deck_count, _count_group(known_deck_counts, card_ids)))
+
+    @staticmethod
+    def _group_access_probability(card_ids: set[int], hand: Counter[int], in_play: Counter[int], p_in_deck: float) -> float:
         if not card_ids:
             return 1.0
         if _count_group(hand, card_ids) > 0 or _count_group(in_play, card_ids) > 0:
             return 1.0
-        return _clamp01(1.0 - p_unavailable)
+        return _clamp01(p_in_deck)

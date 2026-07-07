@@ -72,6 +72,8 @@ MLP_RANKER = _load_mlp_ranker(ROOT)
 MLP_ENABLED = bool(RUNTIME_OPTIONS.get("mlp_enabled", MLP_RANKER is not None))
 if MLP_ENABLED and MLP_RANKER is None:
     raise FileNotFoundError("runtime_config enables MLP, but mlp_model.json is missing")
+DEFAULT_LINEAR_SCORE_WEIGHT = 0.0 if MLP_ENABLED else 1.0
+DEFAULT_MLP_SCORE_WEIGHT = 1.0
 ADAPTER = RuntimeAdapter()
 ENGINE = DecisionEngine(
     deck=DECK,
@@ -84,8 +86,8 @@ ENGINE = DecisionEngine(
     value_proxy_enabled=bool(RUNTIME_OPTIONS.get("value_proxy_enabled", True)),
     fallback_guardrail_enabled=bool(RUNTIME_OPTIONS.get("fallback_guardrail_enabled", True)),
     engine_exception_fallback_enabled=bool(RUNTIME_OPTIONS.get("engine_exception_fallback_enabled", False)),
-    linear_score_weight=float(RUNTIME_OPTIONS.get("linear_score_weight", 1.0)),
-    mlp_score_weight=float(RUNTIME_OPTIONS.get("mlp_score_weight", 5.0)),
+    linear_score_weight=float(RUNTIME_OPTIONS.get("linear_score_weight", DEFAULT_LINEAR_SCORE_WEIGHT)),
+    mlp_score_weight=float(RUNTIME_OPTIONS.get("mlp_score_weight", DEFAULT_MLP_SCORE_WEIGHT)),
     search_config=SequenceSearchConfig(
         beam_width=8,
         max_depth=8,

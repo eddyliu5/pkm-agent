@@ -43,6 +43,23 @@ def _hand_counts(state: AgentState) -> Counter[int]:
     return Counter(card.id for card in state.my_hand)
 
 
+def _is_basic_pokemon(card_id: int | None) -> bool:
+    data = card_data(card_id)
+    return bool(data and getattr(data, "basic", False))
+
+
+def _has_playable_basic_pokemon_in_hand(state: AgentState) -> bool:
+    if len(state.my_bench) >= state.my_bench_max:
+        return False
+    return any(_is_basic_pokemon(card.id) for card in state.my_hand)
+
+
+def _active_hp_fraction(state: AgentState) -> float:
+    if not state.my_active:
+        return 1.0
+    return max(0.0, min(1.0, float(state.my_active.hp) / max(1.0, float(state.my_active.max_hp))))
+
+
 def _min_attack_cost(card_id: int | None) -> int:
     data = card_data(card_id)
     costs: list[int] = []
@@ -87,6 +104,11 @@ def extract_action_features(
     source_id = action.source_card_id
     target_id = action.target_card_id
     hand_counts = _hand_counts(state)
+    source_is_basic_pokemon = _is_basic_pokemon(source_id)
+    only_pokemon_in_play = state.my_active is not None and not state.my_bench
+    active_hp_frac = _active_hp_fraction(state)
+    active_low_hp = active_hp_frac <= 0.45 or (state.my_active is not None and state.my_active.hp <= 70)
+    playable_basic_in_hand = _has_playable_basic_pokemon_in_hand(state)
     attacker_ids = main_attackers | backup_attackers
     ready_attackers = _ready_attackers(state, attacker_ids)
     main_ready = _ready_attackers(state, main_attackers) > 0
@@ -106,6 +128,8 @@ def extract_action_features(
         "opp_energy_in_play": min(10.0, float(state.opp_energy_in_play)) / 10.0,
         "hand_size": min(12.0, float(len(state.my_hand))) / 12.0,
         "bench_space": max(0.0, 5.0 - float(len(state.my_bench))) / 5.0,
+        "only_pokemon_in_play": 1.0 if only_pokemon_in_play else 0.0,
+        "my_active_low_hp": 1.0 if active_low_hp else 0.0,
         "ready_attackers": min(3.0, float(ready_attackers)) / 3.0,
         "main_attacker_ready": 1.0 if main_ready else 0.0,
         "main_line_in_play": min(3.0, float(main_in_play)) / 3.0,
@@ -130,6 +154,8 @@ def extract_action_features(
         features["end_turn"] = 1.0
         if _has_useful_non_terminal_action(state, action):
             features["end_with_useful_action"] = 1.0
+        if only_pokemon_in_play and playable_basic_in_hand:
+            features["end_with_empty_board_risk"] = 1.0
 
     if action.is_attack:
         damage = _attack_damage(state, action)
@@ -151,9 +177,19 @@ def extract_action_features(
                 features["attack_removes_must_answer"] = 1.0
         if _has_useful_non_terminal_action(state, action) and "attack_wins_game" not in features:
             features["attack_before_setup"] = 1.0
+        if only_pokemon_in_play and playable_basic_in_hand and "attack_wins_game" not in features:
+            features["attack_with_empty_board_risk"] = 1.0
 
     if action.is_play:
         features["play_card"] = 1.0
+        if source_is_basic_pokemon:
+            features["play_pokemon"] = 1.0
+            if only_pokemon_in_play:
+                features["play_pokemon_to_avoid_empty_board_loss"] = 1.0
+                if active_low_hp:
+                    features["play_pokemon_behind_low_active"] = 1.0
+            elif active_low_hp and len(state.my_bench) <= 1:
+                features["play_pokemon_to_stabilize_board"] = 1.0
         if source_id in setup_basics:
             features["play_setup_basic"] = 1.0
         if source_id in search_cards:
@@ -267,6 +303,7 @@ def default_weights() -> dict[str, float]:
         "number_value": 20.0,
         "end_turn": -80.0,
         "end_with_useful_action": -1000.0,
+        "end_with_empty_board_risk": -2200.0,
         "attack": 90.0,
         "attack_damage_frac": 250.0,
         "attack_with_main": 80.0,
@@ -277,7 +314,12 @@ def default_weights() -> dict[str, float]:
         "attack_denies_evolution": 520.0,
         "attack_removes_must_answer": 320.0,
         "attack_before_setup": -220.0,
+        "attack_with_empty_board_risk": -1400.0,
         "play_card": 10.0,
+        "play_pokemon": 55.0,
+        "play_pokemon_to_avoid_empty_board_loss": 2200.0,
+        "play_pokemon_behind_low_active": 1200.0,
+        "play_pokemon_to_stabilize_board": 420.0,
         "play_setup_basic": 150.0,
         "play_search": 260.0,
         "play_draw": 220.0,

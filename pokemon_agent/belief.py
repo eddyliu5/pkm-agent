@@ -18,6 +18,7 @@ class PrizeInfo:
     available_key_cards: dict[int, int]
     unknown_prize_count: int
     unknown_prize_pool: Counter[int]
+    known_deck_counts: Counter[int] = field(default_factory=Counter)
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,7 @@ class PrizeTracker:
             inferred_from_deck_reveal = _subtract_counts(deck_counts, visible, visible_deck, temporary_visible)
             known.update(inferred_from_deck_reveal)
 
+        known_deck_counts = Counter(visible_deck) if sum(visible_deck.values()) == state.my_deck_count else Counter()
         unknown_prize_count = max(0, state.my_prizes_remaining - sum(known.values()))
         unknown_prize_pool = _subtract_counts(hidden, visible_deck, inferred_from_deck_reveal)
         possible = Counter(_take_from_counts(Counter(unknown_prize_pool), unknown_prize_count, decklist))
@@ -219,6 +221,7 @@ class PrizeTracker:
             available_key_cards=available,
             unknown_prize_count=unknown_prize_count,
             unknown_prize_pool=unknown_prize_pool,
+            known_deck_counts=known_deck_counts,
         )
 
 
@@ -313,6 +316,7 @@ class BeliefBuilder:
             known_prized=prize_info.known_prized,
             unknown_prize_pool=prize_info.unknown_prize_pool,
             unknown_prize_count=prize_info.unknown_prize_count,
+            known_deck_counts=prize_info.known_deck_counts,
         )
         samples = tuple(self._hidden_sample(obs, state, opponent, variant=index) for index in range(self.num_hidden_samples))
         return BeliefState(prize_info=prize_info, opponent=opponent, probabilities=probabilities, hidden_samples=samples)

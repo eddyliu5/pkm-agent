@@ -93,13 +93,13 @@ class DecisionEngine:
         self.value_proxy_enabled = bool(value_proxy_enabled)
         self.fallback_guardrail_enabled = bool(fallback_guardrail_enabled)
         self.engine_exception_fallback_enabled = bool(engine_exception_fallback_enabled)
-        self.feature_schema_version = "sequence_v3_clean" if self.clean_evaluator else "sequence_v3_full"
+        self.feature_schema_version = "clean" if self.clean_evaluator else "full"
         if not mlp_enabled:
             mlp_ranker = None
         if mlp_ranker is not None:
             mlp_ranker.validate_feature_schema(self.feature_schema_version)
         self.featurizer = (
-            CleanSequenceFeaturizer()
+            CleanSequenceFeaturizer(config=config)
             if self.clean_evaluator
             else SequenceFeaturizer(config=config, knowledge=self.knowledge, include_probability=self.probability_features_enabled)
         )

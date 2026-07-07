@@ -89,9 +89,11 @@ Planning can also receive a validated warm-start continuation from the previous 
 - opponent-counterplay score
 - plan-priority bonus
 
+When an MLP ranker is loaded, the intended architecture is linear-for-search and MLP-for-ranking: linear weights still feed planner expansion, pruning, fallback, and diagnostics, while final candidate score defaults to `mlp_score` only (`linear_score_weight=0.0`, `mlp_score_weight=1.0`). Guardrails remain enabled after ranking to reject invalid or obviously unsafe final selections.
+
 The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`.
 
-`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, game-plan, resource, threat, opponent, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs.
+`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, self-deck archetype/plan, game-plan, resource, threat, opponent, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs while retaining self-deck context.
 
 ## Acting Layer
 
@@ -115,11 +117,13 @@ Trainable or learned components are intentionally replaceable, but only the MLP 
 - explicit sequence feature schemas in `SequenceFeaturizer` and `CleanSequenceFeaturizer`
 - replay and MLP training utilities in `replay_pipeline.py`
 
+The MLP ranker is a dependency-free two-hidden-layer model. Training excludes scorer-produced `linear_score`/`mlp_score` diagnostics from its input vocabulary, uses full-schema features by default, builds replay labels from each player's submitted deck when available, and selects best checkpoints from a deterministic replay-source validation split.
+
 Unnecessary for the current workflow:
 
 - legacy/unversioned MLP feature schemas
 - silent exception fallback to the linear policy
-- training linear weights as the main improvement path
+- training linear weights as the main improvement path rather than search support
 - carrying backward-compatibility behavior for old checkpoints
 
 Runtime options in `runtime_config.json` can enable or disable clean evaluation, probability features, MLP scoring, value proxy scoring, fallback guardrails, score weights, and hidden sample count.

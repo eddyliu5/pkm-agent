@@ -7,7 +7,8 @@ import tarfile
 from pathlib import Path
 
 from .cg_loader import PROJECT_ROOT, cg_root
-from .config import DEFAULT_CONFIG, read_deck
+from .config import DEFAULT_CONFIG, load_config, read_deck
+from .deck_db import deck_heuristic_config, expand_deck, get_deck, load_deck_db
 from .features import default_weights
 from .sequence import default_clean_sequence_weights
 
@@ -17,6 +18,7 @@ def build_submission(
     mlp_model_path: str | None = None,
     output: str = "artifacts/submission/submission.tar.gz",
     clean_evaluator: bool = False,
+    deck_id: str | None = None,
 ) -> Path:
     output_path = Path(output)
     if not output_path.is_absolute():
@@ -26,7 +28,14 @@ def build_submission(
         shutil.rmtree(build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    deck = read_deck()
+    packaged_config = load_config()
+    if deck_id:
+        db = load_deck_db()
+        deck_record = get_deck(deck_id, db)
+        deck = expand_deck(deck_record)
+        packaged_config.update(deck_heuristic_config(deck_record, db))
+    else:
+        deck = read_deck(config=packaged_config)
     with (build_dir / "deck.csv").open("w", encoding="utf-8") as fh:
         for card_id in deck:
             fh.write(f"{card_id}\n")
@@ -43,6 +52,7 @@ def build_submission(
         json.dump({"weights": weights}, fh, indent=2, sort_keys=True)
     if mlp_model_path:
         shutil.copy2(Path(mlp_model_path), build_dir / "mlp_model.json")
+    linear_score_weight = 0.0 if mlp_model_path else 1.0
     with (build_dir / "runtime_config.json").open("w", encoding="utf-8") as fh:
         json.dump(
             {
@@ -53,8 +63,8 @@ def build_submission(
                 "fallback_guardrail_enabled": True,
                 "engine_exception_fallback_enabled": False,
                 "num_hidden_samples": 1,
-                "linear_score_weight": 0.05 if clean_evaluator else 1.0,
-                "mlp_score_weight": 1.0 if clean_evaluator else 5.0,
+                "linear_score_weight": linear_score_weight,
+                "mlp_score_weight": 1.0,
             },
             fh,
             indent=2,
@@ -66,8 +76,6 @@ def build_submission(
     shutil.copytree(PROJECT_ROOT / "pokemon_agent", build_dir / "pokemon_agent", ignore=ignore_generated)
     config_dir = build_dir / "configs"
     config_dir.mkdir()
-    with DEFAULT_CONFIG.open("r", encoding="utf-8") as fh:
-        packaged_config = json.load(fh)
     packaged_config["deck_path"] = "deck.csv"
     with (config_dir / DEFAULT_CONFIG.name).open("w", encoding="utf-8") as fh:
         json.dump(packaged_config, fh, indent=2, sort_keys=True)
@@ -92,8 +100,15 @@ def main() -> None:
     parser.add_argument("--mlp-model", default=None)
     parser.add_argument("--output", default="artifacts/submission/submission.tar.gz")
     parser.add_argument("--clean", action="store_true", help="Package the clean sequence evaluator runtime.")
+    parser.add_argument("--deck-id", default=None, help="Package this deck_db deck id instead of the default deck.")
     args = parser.parse_args()
-    build_submission(weights_path=args.weights, mlp_model_path=args.mlp_model, output=args.output, clean_evaluator=args.clean)
+    build_submission(
+        weights_path=args.weights,
+        mlp_model_path=args.mlp_model,
+        output=args.output,
+        clean_evaluator=args.clean,
+        deck_id=args.deck_id,
+    )
 
 
 if __name__ == "__main__":

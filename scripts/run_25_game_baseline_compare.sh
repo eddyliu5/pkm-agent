@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 PYTHON="${PYTHON:-./.venv/bin/python}"
 GAMES="${GAMES:-25}"
+EVAL_WORKERS="${EVAL_WORKERS:-1}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 
 PREVIOUS_AGENT="${PREVIOUS_AGENT:-sequence}"
@@ -25,6 +26,7 @@ run_eval() {
     --agent "$agent"
     --opponent "$opponent"
     --games "$GAMES"
+    --workers "$EVAL_WORKERS"
     --out-dir "$out_dir"
   )
 
@@ -42,6 +44,7 @@ printf 'Output root: %s\n' "$OUT_ROOT"
 printf 'Previous:    %s\n' "$PREVIOUS_AGENT"
 printf 'Current:     %s\n' "$CURRENT_AGENT"
 printf 'Games:       %s per matchup\n' "$GAMES"
+printf 'Workers:     %s\n' "$EVAL_WORKERS"
 
 for label_agent in \
   "previous::$PREVIOUS_AGENT" \

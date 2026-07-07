@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 from ..belief import BeliefState
 from ..features import combine_feature_dicts
@@ -9,6 +10,26 @@ from ..knowledge import CardKnowledgeStore
 from ..observation.snapshots import ResourceSnapshot, ThreatSnapshot
 from ..state import AgentState, PokemonView
 from .types import CandidateSequence
+
+
+def _feature_token(value: object) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
+    return token or "unknown"
+
+
+def _self_deck_features(config: dict | None) -> dict[str, float]:
+    if not config:
+        return {}
+    features: dict[str, float] = {}
+    archetype = config.get("archetype")
+    deck_plan_type = config.get("deck_plan_type")
+    if archetype:
+        features[f"self_archetype_{_feature_token(archetype)}"] = 1.0
+    if deck_plan_type:
+        features[f"self_plan_type_{_feature_token(deck_plan_type)}"] = 1.0
+    if config.get("replay_deck_matched_db"):
+        features["self_deck_matched_db"] = 1.0
+    return features
 
 
 class SequenceFeaturizer:
@@ -33,6 +54,7 @@ class SequenceFeaturizer:
         features["seq_length"] = min(1.0, float(len(sequence.steps)) / 8.0)
         features["seq_uses_attack"] = 1.0 if any(action.is_attack for step in sequence.steps for action in step.actions) else 0.0
         features["seq_uses_end"] = 1.0 if any(action.is_end for step in sequence.steps for action in step.actions) else 0.0
+        features.update(_self_deck_features(self.config))
         features[f"plan_{plan.deck_plan_type}"] = 1.0
         features[f"phase_{plan.phase}"] = 1.0
         features[f"turn_goal_{plan.turn_plan.primary_goal}"] = 1.0
@@ -151,6 +173,9 @@ class SequenceFeaturizer:
 class CleanSequenceFeaturizer:
     """Narrow consequence-focused features for the clean runtime path."""
 
+    def __init__(self, config: dict | None = None):
+        self.config = config or {}
+
     def featurize(
         self,
         root_state: AgentState,
@@ -168,6 +193,7 @@ class CleanSequenceFeaturizer:
         features["seq_length"] = min(1.0, float(len(sequence.steps)) / 8.0)
         features["seq_uses_attack"] = 1.0 if any(action.is_attack for step in sequence.steps for action in step.actions) else 0.0
         features["seq_uses_end"] = 1.0 if any(action.is_end for step in sequence.steps for action in step.actions) else 0.0
+        features.update(_self_deck_features(self.config))
         features[f"turn_goal_{plan.turn_plan.primary_goal}"] = 1.0
         features.update(self._board_features(root_state))
         intent = belief.opponent.intent
@@ -195,6 +221,7 @@ class CleanSequenceFeaturizer:
             "number_value",
             "end_turn",
             "end_with_useful_action",
+            "end_with_empty_board_risk",
             "attack",
             "attack_damage_frac",
             "attack_takes_ko",
@@ -203,6 +230,11 @@ class CleanSequenceFeaturizer:
             "attack_denies_evolution",
             "attack_removes_must_answer",
             "attack_before_setup",
+            "attack_with_empty_board_risk",
+            "play_pokemon",
+            "play_pokemon_to_avoid_empty_board_loss",
+            "play_pokemon_behind_low_active",
+            "play_pokemon_to_stabilize_board",
             "play_gust",
             "play_gust_without_ready_attacker",
             "play_gust_to_deny_evolution",

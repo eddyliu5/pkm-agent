@@ -1,5 +1,7 @@
 {
   "name": "starmie_froslass",
+  "deck_id": "limitless_ashleysandlin_starmie_froslass",
+  "archetype": "starmie_froslass",
   "deck_path": "sample/starmie-froslass/deck.csv",
   "deck_plan_type": "setup_big_attacker",
   "card_ids": {},

@@ -117,6 +117,12 @@ class DeckSpecificHeuristicPolicy(LinearQPolicy):
                 "attack_with_main": 420.0,
                 "attack_with_backup": 180.0,
                 "attack_before_setup": -450.0,
+                "attack_with_empty_board_risk": -1800.0,
+                "end_with_empty_board_risk": -2600.0,
+                "play_pokemon": 80.0,
+                "play_pokemon_to_avoid_empty_board_loss": 2600.0,
+                "play_pokemon_behind_low_active": 1500.0,
+                "play_pokemon_to_stabilize_board": 520.0,
                 "play_setup_basic": 650.0,
                 "play_main_line": 520.0,
                 "play_main_line_after_setup": -220.0,
@@ -174,8 +180,8 @@ class SequencePolicy(Policy):
         deck: list[int] | None = None,
         mlp_ranker: MLPSequenceRanker | None = None,
         mlp_model_path: str | Path | None = None,
-        linear_score_weight: float = 1.0,
-        mlp_score_weight: float = 5.0,
+        linear_score_weight: float | None = None,
+        mlp_score_weight: float | None = None,
         clean_evaluator: bool = False,
         probability_features_enabled: bool = True,
         mlp_enabled: bool = True,
@@ -192,6 +198,10 @@ class SequencePolicy(Policy):
         self.deck = deck or read_deck(config=self.config)
         if mlp_ranker is None and mlp_model_path is not None:
             mlp_ranker = MLPSequenceRanker.from_file(mlp_model_path)
+        if linear_score_weight is None:
+            linear_score_weight = 0.0 if mlp_ranker is not None and mlp_enabled else 1.0
+        if mlp_score_weight is None:
+            mlp_score_weight = 1.0
         self.engine = DecisionEngine(
             deck=self.deck,
             config=self.config,
@@ -290,7 +300,7 @@ def make_policy(
             config=cfg,
             deck=deck or read_deck(config=cfg),
             clean_evaluator=True,
-            linear_score_weight=0.05,
+            linear_score_weight=1.0,
             mlp_score_weight=1.0,
             seed=seed,
             **sequence_options,
@@ -302,7 +312,7 @@ def make_policy(
             config=cfg,
             deck=deck or read_deck(config=cfg),
             clean_evaluator=True,
-            linear_score_weight=0.05,
+            linear_score_weight=1.0,
             mlp_score_weight=1.0,
             seed=seed,
             **sequence_options,
@@ -318,7 +328,7 @@ def make_policy(
                 config=cfg,
                 deck=deck or read_deck(config=cfg),
                 clean_evaluator=True,
-                linear_score_weight=0.05,
+                linear_score_weight=0.0,
                 mlp_score_weight=1.0,
                 seed=seed,
                 **sequence_options,
@@ -328,7 +338,7 @@ def make_policy(
             config=cfg,
             deck=deck or read_deck(config=cfg),
             clean_evaluator=True,
-            linear_score_weight=0.05,
+            linear_score_weight=0.0,
             mlp_score_weight=1.0,
             seed=seed,
             **sequence_options,

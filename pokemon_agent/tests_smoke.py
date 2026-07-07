@@ -19,7 +19,7 @@ from .decision_engine import DecisionEngine
 from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_decks, load_deck_db, rank_decks_by_observed_cards, validate_deck
 from .engine import run_episode
 from .eval import _opponent_deck_pool
-from .features import extract_action_features
+from .features import default_weights, extract_action_features, score_features
 from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
 from .policy import HeuristicPolicy, RandomPolicy, SequencePolicy, make_policy
 from .opponent_memory import OpponentMemory
@@ -170,12 +170,12 @@ def _fake_card(card_id: int, player_index: int = 0):
     return SimpleNamespace(id=int(card_id), serial=int(card_id), playerIndex=player_index)
 
 
-def _fake_pokemon(card_id: int, *, energy_count: int = 0) -> PokemonView:
+def _fake_pokemon(card_id: int, *, energy_count: int = 0, hp: int = 100, max_hp: int = 100) -> PokemonView:
     return PokemonView(
         id=int(card_id),
         name=f"card {card_id}",
-        hp=100,
-        max_hp=100,
+        hp=hp,
+        max_hp=max_hp,
         energy_count=energy_count,
         energy_ids=(),
         tool_ids=(),
@@ -307,7 +307,14 @@ def test_search_tree_reconstructs_leaf_sequence() -> None:
     assert sequence.score == 30.0
 
 
-def _fake_action_view(index: int, *, option_type: str = "YES", label: str = "choose yes") -> ActionView:
+def _fake_action_view(
+    index: int,
+    *,
+    option_type: str = "YES",
+    label: str = "choose yes",
+    source_card_id: int | None = None,
+    attack_id: int | None = None,
+) -> ActionView:
     return ActionView(
         index=index,
         option=SimpleNamespace(number=None),
@@ -315,12 +322,12 @@ def _fake_action_view(index: int, *, option_type: str = "YES", label: str = "cho
         context="MAIN",
         option_type=option_type,
         source_player_index=0,
-        source_card_id=None,
+        source_card_id=source_card_id,
         source_name=None,
         target_player_index=None,
         target_card_id=None,
         target_name=None,
-        attack_id=None,
+        attack_id=attack_id,
         attack_name=None,
         label=label,
     )
@@ -335,6 +342,34 @@ def _fake_observed_for_warm_start(state: AgentState, actions: tuple[ActionView, 
         state=replace(state, legal_actions=actions, select_option_count=option_count),
         belief=SimpleNamespace(opponent=SimpleNamespace(intent=None)),
     )
+
+
+def test_empty_board_safety_features_prefer_benching_basic() -> None:
+    play_basic = _fake_action_view(1, option_type="PLAY", label="play Snorunt", source_card_id=860)
+    attack = _fake_action_view(2, option_type="ATTACK", label="attack")
+    end_turn = _fake_action_view(3, option_type="END", label="end turn")
+    state = replace(
+        _memory_state(turn=3),
+        my_active=_fake_pokemon(1031, hp=60, max_hp=180),
+        my_hand=(CardView(id=860, name="Snorunt"),),
+        legal_actions=(play_basic, attack, end_turn),
+    )
+    config = {
+        "main_attackers": [1031],
+        "main_line": [860, 1030, 1031],
+        "setup_basics": [860, 1030],
+        "backup_attackers": [],
+    }
+    play_features = extract_action_features(state, play_basic, config)
+    attack_features = extract_action_features(state, attack, config)
+    end_features = extract_action_features(state, end_turn, config)
+    assert play_features["play_pokemon_to_avoid_empty_board_loss"] == 1.0
+    assert play_features["play_pokemon_behind_low_active"] == 1.0
+    assert attack_features["attack_with_empty_board_risk"] == 1.0
+    assert end_features["end_with_empty_board_risk"] == 1.0
+    weights = default_weights()
+    assert score_features(play_features, weights) > score_features(attack_features, weights)
+    assert score_features(play_features, weights) > score_features(end_features, weights)
 
 
 def test_decision_engine_warm_start_reuses_valid_remainder() -> None:
@@ -614,7 +649,10 @@ def test_replay_pipeline_smoke() -> None:
                 {
                     "id": "synthetic",
                     "info": {"publicScore": 1800},
-                    "steps": [[{"observation": obs_dict, "action": selected, "reward": 0, "status": "ACTIVE"}]],
+                    "steps": [
+                        [{"action": deck, "reward": 0, "status": "ACTIVE"}, {"action": deck, "reward": 0, "status": "ACTIVE"}],
+                        [{"observation": obs_dict, "action": selected, "reward": 0, "status": "ACTIVE"}],
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -630,6 +668,7 @@ def test_replay_pipeline_smoke() -> None:
         )
         assert label_summary["examples"] == 1
         assert label_summary["matched"] == 1
+        assert label_summary["replay_decks_matched_db"] + label_summary["replay_decks_unknown"] == 1
 
         coverage_labels_path = tmp_path / "coverage_labels.jsonl"
         coverage_summary = build_candidate_coverage_dataset(
@@ -700,7 +739,7 @@ def test_replay_pipeline_smoke() -> None:
         assert compact_summary["output_records"] == 1
         assert compact_summary["candidate_count"] > 0
         compact_record = json.loads(compact_path.read_text(encoding="utf-8").splitlines()[0])
-        assert set(compact_record) == {"candidates", "label_index", "matched"}
+        assert {"candidates", "label_index", "matched", "source", "episode_id", "self_deck_id", "self_archetype"} <= set(compact_record)
 
         train_summary = pretrain_sequence_scorer(str(labels_path), out_dir=str(tmp_path / "pretrain"), epochs=1, lr=0.001)
         assert train_summary["examples"] == 1
@@ -712,15 +751,22 @@ def test_replay_pipeline_smoke() -> None:
             epochs=1,
             lr=0.001,
             hidden_dim=4,
+            hidden_dim2=2,
             max_features=32,
             max_examples=1,
             seed=7,
+            validation_fraction=0.0,
         )
         assert mlp_summary["examples"] == 1
         assert mlp_summary["feature_count"] > 0
+        assert mlp_summary["hidden_dims"] == [4, 2]
+        assert mlp_summary["validation_fraction"] == 0.0
         mlp_path = Path(mlp_summary["latest_checkpoint"])
         assert mlp_path.exists()
         model = MLPSequenceRanker.from_file(mlp_path)
+        assert model.hidden_dims == [4, 2]
+        assert model.feature_schema_version == "full"
+        assert "linear_score" not in model.feature_index
         record = json.loads(labels_path.read_text(encoding="utf-8").splitlines()[0])
         scores = model.score_batch([candidate["features"] for candidate in record["candidates"]])
         assert len(scores) == len(record["candidates"])
@@ -741,6 +787,8 @@ def test_replay_pipeline_smoke() -> None:
 
         combined = make_policy(f"sequence-mlp:{mlp_path},{train_summary['latest_checkpoint']}", config=config, seed=9)
         assert isinstance(combined, SequencePolicy)
+        assert combined.engine.scorer.linear_weight == 0.0
+        assert combined.engine.scorer.mlp_weight == 1.0
 
         bundled = build_submission(
             weights_path=train_summary["latest_checkpoint"],
@@ -749,8 +797,11 @@ def test_replay_pipeline_smoke() -> None:
         )
         with tarfile.open(bundled, "r:gz") as tar:
             names = set(tar.getnames())
+            runtime_config = json.loads(tar.extractfile("runtime_config.json").read().decode("utf-8"))  # type: ignore[union-attr]
         assert "mlp_model.json" in names
         assert "weights.json" in names
+        assert runtime_config["linear_score_weight"] == 0.0
+        assert runtime_config["mlp_score_weight"] == 1.0
 
 
 def test_top_replay_planner_candidate_coverage() -> None:
@@ -791,6 +842,7 @@ def main() -> None:
     test_opponent_memory_setup_tag_clears_after_evolution()
     test_probability_model_hypergeometric_features()
     test_search_tree_reconstructs_leaf_sequence()
+    test_empty_board_safety_features_prefer_benching_basic()
     test_decision_engine_warm_start_reuses_valid_remainder()
     test_decision_engine_warm_start_clears_on_action_mismatch()
     test_prize_tracker_deck_reveal_infers_known_prizes()

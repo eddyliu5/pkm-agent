@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
+import hashlib
 import json
 import math
 import random
 import shutil
 import subprocess
 import sys
+import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +20,7 @@ from typing import Any, Iterable
 from .actions import legal_actions, sanitize_selection
 from .cg_loader import ensure_cg_path
 from .config import load_config, read_deck
+from .deck_db import deck_counts, deck_heuristic_config, expand_deck, iter_decks, load_deck_db
 from .decision_engine import DecisionEngine
 from .engine import EpisodeResult
 from .features import combine_feature_dicts, extract_action_features, score_features
@@ -40,6 +45,18 @@ class ReplayDecision:
     observation: dict[str, Any]
     selected: list[int]
     rating: float | None = None
+    self_deck: list[int] | None = None
+    opponent_deck: list[int] | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedReplayDeck:
+    deck: list[int]
+    config: dict[str, Any]
+    deck_id: str
+    archetype: str
+    archetype_name: str
+    matched_deck_db: bool
 
 
 @dataclass
@@ -309,6 +326,99 @@ def _selected_action(action: Any) -> list[int]:
     return []
 
 
+def _deck_submission_from_action(action: Any) -> list[int] | None:
+    if not isinstance(action, list) or len(action) != 60:
+        return None
+    if not all(isinstance(value, int) for value in action):
+        return None
+    return [int(value) for value in action]
+
+
+def _initial_replay_decks(payload: dict[str, Any]) -> tuple[list[int] | None, list[int] | None]:
+    decks: list[list[int] | None] = [None, None]
+    steps = payload.get("steps")
+    if not isinstance(steps, list):
+        return (None, None)
+    for step in steps:
+        if not isinstance(step, list):
+            continue
+        for player_index, agent_step in enumerate(step[:2]):
+            if decks[player_index] is not None or not isinstance(agent_step, dict):
+                continue
+            deck = _deck_submission_from_action(agent_step.get("action"))
+            if deck is not None:
+                decks[player_index] = deck
+        if decks[0] is not None and decks[1] is not None:
+            break
+    return (decks[0], decks[1])
+
+
+def _deck_count_key(cards: Iterable[int]) -> tuple[tuple[int, int], ...]:
+    return tuple(sorted((int(card_id), int(count)) for card_id, count in Counter(int(card_id) for card_id in cards).items()))
+
+
+def _deck_record_count_key(deck: dict[str, Any]) -> tuple[tuple[int, int], ...]:
+    return tuple(sorted((int(card_id), int(count)) for card_id, count in deck_counts(deck).items()))
+
+
+def _synthetic_replay_deck(cards: list[int]) -> dict[str, Any]:
+    counts = Counter(int(card_id) for card_id in cards)
+    digest = hashlib.sha1(",".join(str(card_id) for card_id in sorted(cards)).encode("utf-8")).hexdigest()[:12]
+    return {
+        "id": f"replay_unknown_{digest}",
+        "name": f"Replay unknown deck {digest}",
+        "archetype": "unknown_replay",
+        "archetype_name": "Unknown replay deck",
+        "counts": [{"id": card_id, "count": count} for card_id, count in sorted(counts.items())],
+        "source": {"type": "replay_submission"},
+    }
+
+
+class ReplayDeckResolver:
+    def __init__(self, base_config: dict[str, Any]):
+        self.base_config = dict(base_config)
+        self.db = load_deck_db()
+        self.records_by_counts: dict[tuple[tuple[int, int], ...], dict[str, Any]] = {}
+        for deck in iter_decks(self.db):
+            self.records_by_counts.setdefault(_deck_record_count_key(deck), deck)
+        self.cache: dict[tuple[tuple[int, int], ...], ResolvedReplayDeck] = {}
+
+    def resolve(self, cards: list[int] | None) -> ResolvedReplayDeck | None:
+        if not cards:
+            return None
+        key = _deck_count_key(cards)
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+        matched = self.records_by_counts.get(key)
+        deck_record = matched or _synthetic_replay_deck(cards)
+        derived_config = deck_heuristic_config(deck_record, self.db)
+        config = dict(self.base_config)
+        config.update(derived_config)
+        config["replay_deck_matched_db"] = matched is not None
+        resolved = ResolvedReplayDeck(
+            deck=expand_deck(deck_record) if matched is not None else [int(card_id) for card_id in cards],
+            config=config,
+            deck_id=str(deck_record.get("id", "")),
+            archetype=str(deck_record.get("archetype", "")),
+            archetype_name=str(deck_record.get("archetype_name", deck_record.get("archetype", ""))),
+            matched_deck_db=matched is not None,
+        )
+        self.cache[key] = resolved
+        return resolved
+
+
+def _deck_metadata(prefix: str, resolved: ResolvedReplayDeck | None) -> dict[str, Any]:
+    if resolved is None:
+        return {}
+    return {
+        f"{prefix}_deck_id": resolved.deck_id,
+        f"{prefix}_archetype": resolved.archetype,
+        f"{prefix}_archetype_name": resolved.archetype_name,
+        f"{prefix}_deck_matched_db": resolved.matched_deck_db,
+    }
+
+
 def _selection_match_key(selected: list[int]) -> tuple[int, ...]:
     return tuple(sorted(int(index) for index in selected))
 
@@ -332,6 +442,7 @@ def iter_replay_decisions(paths: Iterable[str | Path], *, min_rating: float | No
             steps = payload.get("steps")
             if not isinstance(steps, list):
                 continue
+            replay_decks = _initial_replay_decks(payload)
             pending_observations: dict[int, tuple[int, dict[str, Any]]] = {}
             for step_index, step in enumerate(steps):
                 if isinstance(step, dict):
@@ -358,13 +469,16 @@ def iter_replay_decisions(paths: Iterable[str | Path], *, min_rating: float | No
                                 observation=decision_obs,
                                 selected=selected,
                                 rating=rating,
+                                self_deck=replay_decks[player_index] if player_index < len(replay_decks) else None,
+                                opponent_deck=replay_decks[1 - player_index] if player_index in (0, 1) else None,
                             )
                     if isinstance(obs, dict) and obs.get("select") is not None:
                         pending_observations[player_index] = (step_index, obs)
 
 
 def _compact_features(features: dict[str, float]) -> dict[str, float]:
-    return {str(key): float(value) for key, value in features.items() if value}
+    excluded = {"linear_score", "mlp_score"}
+    return {str(key): float(value) for key, value in features.items() if value and str(key) not in excluded}
 
 
 def _candidate_record(sequence: Any) -> dict[str, Any]:
@@ -399,22 +513,42 @@ def build_candidate_coverage_dataset(
     max_nodes: int = 256,
     time_budget_ms: int = 1000,
     num_hidden_samples: int = 1,
+    multi_self_decks: bool = True,
 ) -> dict[str, Any]:
     config = load_config(config_path)
-    deck = read_deck(config=config)
+    default_deck = read_deck(config=config)
     weights = load_weights(weights_path) if weights_path else None
-    engine = DecisionEngine(
-        deck=deck,
-        config=config,
-        weights=weights,
-        search_config=SequenceSearchConfig(
-            beam_width=beam_width,
-            max_depth=max_depth,
-            max_nodes=max_nodes,
-            time_budget_ms=time_budget_ms,
-            num_hidden_samples=max(1, int(num_hidden_samples)),
-        ),
+    search_config = SequenceSearchConfig(
+        beam_width=beam_width,
+        max_depth=max_depth,
+        max_nodes=max_nodes,
+        time_budget_ms=time_budget_ms,
+        num_hidden_samples=max(1, int(num_hidden_samples)),
     )
+    resolver = ReplayDeckResolver(config) if multi_self_decks else None
+    engine_cache: dict[tuple[int, str], DecisionEngine] = {}
+    active_episode: tuple[str, str] | None = None
+
+    def engine_for(decision: ReplayDecision) -> tuple[DecisionEngine, ResolvedReplayDeck | None, ResolvedReplayDeck | None]:
+        nonlocal active_episode
+        episode_key = (decision.source, decision.episode_id)
+        if active_episode != episode_key:
+            engine_cache.clear()
+            active_episode = episode_key
+        resolved = resolver.resolve(decision.self_deck) if resolver is not None else None
+        opponent_resolved = resolver.resolve(decision.opponent_deck) if resolver is not None else None
+        cache_key = (decision.player_index, resolved.deck_id if resolved is not None else "__default__")
+        engine = engine_cache.get(cache_key)
+        if engine is None:
+            engine = DecisionEngine(
+                deck=resolved.deck if resolved is not None else default_deck,
+                config=resolved.config if resolved is not None else config,
+                weights=weights,
+                search_config=search_config,
+            )
+            engine_cache[cache_key] = engine
+        return engine, resolved, opponent_resolved
+
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     stats = {
@@ -427,6 +561,10 @@ def build_candidate_coverage_dataset(
         "candidate_errors": 0,
         "expert_action_in_candidates_rate": 0.0,
         "candidate_coverage_by_action_type": {},
+        "multi_self_decks": multi_self_decks,
+        "replay_decks_matched_db": 0,
+        "replay_decks_unknown": 0,
+        "replay_decks_missing": 0,
     }
     action_type_totals: dict[str, int] = {}
     action_type_hits: dict[str, int] = {}
@@ -445,6 +583,13 @@ def build_candidate_coverage_dataset(
             if invalid:
                 stats["expert_action_missing"] += 1
                 continue
+            engine, resolved_deck, opponent_resolved = engine_for(decision)
+            if resolved_deck is None:
+                stats["replay_decks_missing"] += 1
+            elif resolved_deck.matched_deck_db:
+                stats["replay_decks_matched_db"] += 1
+            else:
+                stats["replay_decks_unknown"] += 1
             try:
                 observed = engine.observe(obs)
                 planning = engine.plan(observed)
@@ -484,6 +629,8 @@ def build_candidate_coverage_dataset(
                 "hidden_samples_used": list(planning.hidden_samples_used),
                 "candidates": [_candidate_coverage_record(sequence) for sequence in candidates],
             }
+            record.update(_deck_metadata("self", resolved_deck))
+            record.update(_deck_metadata("opponent", opponent_resolved))
             fh.write(json.dumps(record, sort_keys=True) + "\n")
             stats["examples"] += 1
             stats["expert_action_in_candidates" if matched else "expert_action_missing"] += 1
@@ -519,29 +666,116 @@ def build_label_dataset(
     max_nodes: int = 256,
     time_budget_ms: int = 1000,
     clean_evaluator: bool = False,
+    multi_self_decks: bool = True,
+    workers: int = 1,
 ) -> dict[str, Any]:
-    config = load_config(config_path)
-    deck = read_deck(config=config)
-    weights = load_weights(weights_path) if weights_path else None
-    engine = DecisionEngine(
-        deck=deck,
-        config=config,
-        weights=weights,
-        search_config=SequenceSearchConfig(beam_width=beam_width, max_depth=max_depth, max_nodes=max_nodes, time_budget_ms=time_budget_ms),
+    if workers > 1:
+        return _build_label_dataset_parallel(
+            inputs,
+            output=output,
+            config_path=config_path,
+            weights_path=weights_path,
+            min_rating=min_rating,
+            max_examples=max_examples,
+            max_candidates=max_candidates,
+            beam_width=beam_width,
+            max_depth=max_depth,
+            max_nodes=max_nodes,
+            time_budget_ms=time_budget_ms,
+            clean_evaluator=clean_evaluator,
+            multi_self_decks=multi_self_decks,
+            workers=workers,
+        )
+    return _build_label_dataset_serial(
+        inputs,
+        output=output,
+        config_path=config_path,
+        weights_path=weights_path,
+        min_rating=min_rating,
+        max_examples=max_examples,
+        max_candidates=max_candidates,
+        beam_width=beam_width,
+        max_depth=max_depth,
+        max_nodes=max_nodes,
+        time_budget_ms=time_budget_ms,
         clean_evaluator=clean_evaluator,
+        multi_self_decks=multi_self_decks,
+        print_summary=True,
     )
-    output_path = Path(output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    stats = {
+
+
+def _label_stats(
+    inputs: list[str],
+    output: str | Path,
+    *,
+    clean_evaluator: bool,
+    multi_self_decks: bool,
+) -> dict[str, Any]:
+    return {
         "inputs": inputs,
-        "output": str(output_path),
+        "output": str(output),
         "examples": 0,
         "matched": 0,
         "unmatched": 0,
         "parse_errors": 0,
         "candidate_errors": 0,
         "clean_evaluator": clean_evaluator,
+        "multi_self_decks": multi_self_decks,
+        "replay_decks_matched_db": 0,
+        "replay_decks_unknown": 0,
+        "replay_decks_missing": 0,
     }
+
+
+def _build_label_dataset_serial(
+    inputs: list[str],
+    *,
+    output: str = "artifacts/replay_labels/sequence_labels.jsonl",
+    config_path: str | None = None,
+    weights_path: str | None = None,
+    min_rating: float | None = None,
+    max_examples: int | None = None,
+    max_candidates: int = 24,
+    beam_width: int = 16,
+    max_depth: int = 10,
+    max_nodes: int = 256,
+    time_budget_ms: int = 1000,
+    clean_evaluator: bool = False,
+    multi_self_decks: bool = True,
+    print_summary: bool = False,
+) -> dict[str, Any]:
+    config = load_config(config_path)
+    default_deck = read_deck(config=config)
+    weights = load_weights(weights_path) if weights_path else None
+    search_config = SequenceSearchConfig(beam_width=beam_width, max_depth=max_depth, max_nodes=max_nodes, time_budget_ms=time_budget_ms)
+    resolver = ReplayDeckResolver(config) if multi_self_decks else None
+    engine_cache: dict[tuple[int, str], DecisionEngine] = {}
+    active_episode: tuple[str, str] | None = None
+
+    def engine_for(decision: ReplayDecision) -> tuple[DecisionEngine, ResolvedReplayDeck | None, ResolvedReplayDeck | None]:
+        nonlocal active_episode
+        episode_key = (decision.source, decision.episode_id)
+        if active_episode != episode_key:
+            engine_cache.clear()
+            active_episode = episode_key
+        resolved = resolver.resolve(decision.self_deck) if resolver is not None else None
+        opponent_resolved = resolver.resolve(decision.opponent_deck) if resolver is not None else None
+        cache_key = (decision.player_index, resolved.deck_id if resolved is not None else "__default__")
+        engine = engine_cache.get(cache_key)
+        if engine is None:
+            engine = DecisionEngine(
+                deck=resolved.deck if resolved is not None else default_deck,
+                config=resolved.config if resolved is not None else config,
+                weights=weights,
+                search_config=search_config,
+                clean_evaluator=clean_evaluator,
+            )
+            engine_cache[cache_key] = engine
+        return engine, resolved, opponent_resolved
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    stats = _label_stats(inputs, output_path, clean_evaluator=clean_evaluator, multi_self_decks=multi_self_decks)
     with output_path.open("w", encoding="utf-8") as fh:
         for decision in iter_replay_decisions(inputs, min_rating=min_rating):
             if max_examples is not None and stats["examples"] >= max_examples:
@@ -557,6 +791,13 @@ def build_label_dataset(
             if invalid:
                 stats["unmatched"] += 1
                 continue
+            engine, resolved_deck, opponent_resolved = engine_for(decision)
+            if resolved_deck is None:
+                stats["replay_decks_missing"] += 1
+            elif resolved_deck.matched_deck_db:
+                stats["replay_decks_matched_db"] += 1
+            else:
+                stats["replay_decks_unknown"] += 1
             try:
                 sequences = engine.score_sequences(obs)
             except Exception:
@@ -585,9 +826,131 @@ def build_label_dataset(
                 "matched": label_index >= 0,
                 "candidates": [_candidate_record(sequence) for sequence in kept],
             }
+            record.update(_deck_metadata("self", resolved_deck))
+            record.update(_deck_metadata("opponent", opponent_resolved))
             fh.write(json.dumps(record, sort_keys=True) + "\n")
             stats["examples"] += 1
             stats["matched" if label_index >= 0 else "unmatched"] += 1
+    if print_summary:
+        print(json.dumps(stats, indent=2))
+    return stats
+
+
+def _merge_label_stats(
+    base: dict[str, Any],
+    shard: dict[str, Any],
+) -> None:
+    for key in (
+        "examples",
+        "matched",
+        "unmatched",
+        "parse_errors",
+        "candidate_errors",
+        "replay_decks_matched_db",
+        "replay_decks_unknown",
+        "replay_decks_missing",
+    ):
+        base[key] = int(base.get(key, 0)) + int(shard.get(key, 0))
+
+
+def _build_label_shard(args: dict[str, Any]) -> dict[str, Any]:
+    stats = _build_label_dataset_serial(
+        [args["input"]],
+        output=args["output"],
+        config_path=args["config_path"],
+        weights_path=args["weights_path"],
+        min_rating=args["min_rating"],
+        max_examples=None,
+        max_candidates=args["max_candidates"],
+        beam_width=args["beam_width"],
+        max_depth=args["max_depth"],
+        max_nodes=args["max_nodes"],
+        time_budget_ms=args["time_budget_ms"],
+        clean_evaluator=args["clean_evaluator"],
+        multi_self_decks=args["multi_self_decks"],
+        print_summary=False,
+    )
+    stats["shard_index"] = args["shard_index"]
+    return stats
+
+
+def _build_label_dataset_parallel(
+    inputs: list[str],
+    *,
+    output: str,
+    config_path: str | None,
+    weights_path: str | None,
+    min_rating: float | None,
+    max_examples: int | None,
+    max_candidates: int,
+    beam_width: int,
+    max_depth: int,
+    max_nodes: int,
+    time_budget_ms: int,
+    clean_evaluator: bool,
+    multi_self_decks: bool,
+    workers: int,
+) -> dict[str, Any]:
+    if max_examples is not None:
+        raise ValueError("--workers cannot be combined with --max-examples because examples are split by replay file.")
+    files = [str(path) for path in _iter_files(inputs)]
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    stats = _label_stats(inputs, output_path, clean_evaluator=clean_evaluator, multi_self_decks=multi_self_decks)
+    stats["workers"] = workers
+    stats["input_files"] = len(files)
+    if not files:
+        output_path.write_text("", encoding="utf-8")
+        print(json.dumps(stats, indent=2))
+        return stats
+
+    with tempfile.TemporaryDirectory(prefix="label_shards_", dir=str(output_path.parent)) as tmp_dir:
+        shard_args = []
+        for index, file_path in enumerate(files):
+            shard_args.append(
+                {
+                    "shard_index": index,
+                    "input": file_path,
+                    "output": str(Path(tmp_dir) / f"shard_{index:06d}.jsonl"),
+                    "config_path": config_path,
+                    "weights_path": weights_path,
+                    "min_rating": min_rating,
+                    "max_candidates": max_candidates,
+                    "beam_width": beam_width,
+                    "max_depth": max_depth,
+                    "max_nodes": max_nodes,
+                    "time_budget_ms": time_budget_ms,
+                    "clean_evaluator": clean_evaluator,
+                    "multi_self_decks": multi_self_decks,
+                }
+            )
+        completed: dict[int, dict[str, Any]] = {}
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_build_label_shard, args): args["shard_index"] for args in shard_args}
+            for future in concurrent.futures.as_completed(futures):
+                shard_index = futures[future]
+                shard_stats = future.result()
+                completed[shard_index] = shard_stats
+                _merge_label_stats(stats, shard_stats)
+                print(
+                    json.dumps(
+                        {
+                            "completed_shards": len(completed),
+                            "input_files": len(files),
+                            "examples": stats["examples"],
+                            "matched": stats["matched"],
+                            "unmatched": stats["unmatched"],
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+        with output_path.open("w", encoding="utf-8") as out_fh:
+            for index in range(len(files)):
+                shard_path = Path(tmp_dir) / f"shard_{index:06d}.jsonl"
+                with shard_path.open("r", encoding="utf-8") as shard_fh:
+                    shutil.copyfileobj(shard_fh, out_fh)
+                shard_path.unlink()
     print(json.dumps(stats, indent=2))
     return stats
 
@@ -676,6 +1039,23 @@ def compact_label_dataset(
                 "matched": matched,
                 "candidates": compact_candidates,
             }
+            for key in (
+                "source",
+                "episode_id",
+                "step_index",
+                "player_index",
+                "rating",
+                "self_deck_id",
+                "self_archetype",
+                "self_archetype_name",
+                "self_deck_matched_db",
+                "opponent_deck_id",
+                "opponent_archetype",
+                "opponent_archetype_name",
+                "opponent_deck_matched_db",
+            ):
+                if key in record:
+                    compact_record[key] = record[key]
             fh.write(json.dumps(compact_record, sort_keys=True, separators=(",", ":")) + "\n")
             stats["output_records"] += 1
             stats["candidate_count"] += len(compact_candidates)
@@ -1087,8 +1467,8 @@ def rl_self_play_mlp(
     temperature: float = 1.0,
     l2: float = 1e-5,
     grad_clip: float = 5.0,
-    linear_score_weight: float = 1.0,
-    mlp_score_weight: float = 5.0,
+    linear_score_weight: float = 0.0,
+    mlp_score_weight: float = 1.0,
     clean_evaluator: bool = False,
 ) -> dict[str, Any]:
     config = load_config(config_path)
@@ -1225,8 +1605,8 @@ def rl_against_sequence_mlp(
     temperature: float = 1.0,
     l2: float = 1e-5,
     grad_clip: float = 5.0,
-    linear_score_weight: float = 1.0,
-    mlp_score_weight: float = 5.0,
+    linear_score_weight: float = 0.0,
+    mlp_score_weight: float = 1.0,
 ) -> dict[str, Any]:
     config = load_config(config_path)
     deck = read_deck(config=config)
@@ -1368,6 +1748,7 @@ def main() -> None:
     coverage_labels.add_argument("--max-nodes", type=int, default=256)
     coverage_labels.add_argument("--time-budget-ms", type=int, default=1000)
     coverage_labels.add_argument("--num-hidden-samples", type=int, default=1)
+    coverage_labels.add_argument("--single-config", action="store_true", help="Ignore replay-submitted decks and use only --config.")
 
     labels = sub.add_parser("labels", help="Convert replay JSON into sequence ranking labels.")
     labels.add_argument("inputs", nargs="+")
@@ -1382,6 +1763,8 @@ def main() -> None:
     labels.add_argument("--max-nodes", type=int, default=256)
     labels.add_argument("--time-budget-ms", type=int, default=1000)
     labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
+    labels.add_argument("--single-config", action="store_true", help="Ignore replay-submitted decks and use only --config.")
+    labels.add_argument("--workers", type=int, default=1, help="Generate labels across replay files with this many worker processes.")
 
     ranking_labels = sub.add_parser("ranking-labels", help="Alias for labels; builds scored ranking labels from replay decisions.")
     ranking_labels.add_argument("inputs", nargs="+")
@@ -1396,6 +1779,8 @@ def main() -> None:
     ranking_labels.add_argument("--max-nodes", type=int, default=256)
     ranking_labels.add_argument("--time-budget-ms", type=int, default=1000)
     ranking_labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
+    ranking_labels.add_argument("--single-config", action="store_true", help="Ignore replay-submitted decks and use only --config.")
+    ranking_labels.add_argument("--workers", type=int, default=1, help="Generate labels across replay files with this many worker processes.")
 
     pretrain = sub.add_parser("pretrain", help="Supervised pretrain sequence weights from labels.")
     pretrain.add_argument("--labels", required=True)
@@ -1419,7 +1804,8 @@ def main() -> None:
     pretrain_mlp.add_argument("--out-dir", default="artifacts/checkpoints/mlp_ranker")
     pretrain_mlp.add_argument("--epochs", type=int, default=3)
     pretrain_mlp.add_argument("--lr", type=float, default=0.001)
-    pretrain_mlp.add_argument("--hidden-dim", type=int, default=64)
+    pretrain_mlp.add_argument("--hidden-dim", type=int, default=0, help="First hidden layer width; 0 derives from input feature count.")
+    pretrain_mlp.add_argument("--hidden-dim2", type=int, default=0, help="Second hidden layer width; 0 derives from hidden-dim.")
     pretrain_mlp.add_argument("--max-features", type=int, default=256)
     pretrain_mlp.add_argument("--min-feature-count", type=int, default=1)
     pretrain_mlp.add_argument("--max-examples", type=int, default=None)
@@ -1429,7 +1815,13 @@ def main() -> None:
     pretrain_mlp.add_argument("--input-clip", type=float, default=8.0)
     pretrain_mlp.add_argument("--grad-clip", type=float, default=5.0)
     pretrain_mlp.add_argument("--normalization", choices=("sparse", "standard"), default="sparse")
-    pretrain_mlp.add_argument("--feature-schema-version", choices=("sequence_v3_full", "sequence_v3_clean"), default="sequence_v3_full")
+    pretrain_mlp.add_argument(
+        "--feature-schema-version",
+        choices=("full", "clean", "sequence_v3_full", "sequence_v3_clean"),
+        default="full",
+    )
+    pretrain_mlp.add_argument("--validation-fraction", type=float, default=0.10)
+    pretrain_mlp.add_argument("--include-linear-score", action="store_true", help="Allow linear_score as an MLP input feature. Default excludes it for MLP-only ranking.")
 
     rl = sub.add_parser("self-play", help="Fine-tune sequence weights with self-play returns.")
     rl.add_argument("--games", type=int, default=500)
@@ -1457,8 +1849,8 @@ def main() -> None:
     rl_mlp.add_argument("--temperature", type=float, default=1.0)
     rl_mlp.add_argument("--l2", type=float, default=1e-5)
     rl_mlp.add_argument("--grad-clip", type=float, default=5.0)
-    rl_mlp.add_argument("--linear-score-weight", type=float, default=1.0)
-    rl_mlp.add_argument("--mlp-score-weight", type=float, default=5.0)
+    rl_mlp.add_argument("--linear-score-weight", type=float, default=0.0)
+    rl_mlp.add_argument("--mlp-score-weight", type=float, default=1.0)
     rl_mlp.add_argument("--clean", action="store_true", help="Fine-tune the MLP inside the clean sequence evaluator.")
 
     rl_vs_sequence = sub.add_parser("train-mlp-vs-sequence", help="Fine-tune an MLP ranker against a frozen sequence baseline.")
@@ -1475,8 +1867,8 @@ def main() -> None:
     rl_vs_sequence.add_argument("--temperature", type=float, default=1.0)
     rl_vs_sequence.add_argument("--l2", type=float, default=1e-5)
     rl_vs_sequence.add_argument("--grad-clip", type=float, default=5.0)
-    rl_vs_sequence.add_argument("--linear-score-weight", type=float, default=1.0)
-    rl_vs_sequence.add_argument("--mlp-score-weight", type=float, default=5.0)
+    rl_vs_sequence.add_argument("--linear-score-weight", type=float, default=0.0)
+    rl_vs_sequence.add_argument("--mlp-score-weight", type=float, default=1.0)
 
     args = parser.parse_args()
     if args.cmd == "fetch":
@@ -1501,6 +1893,7 @@ def main() -> None:
             max_nodes=args.max_nodes,
             time_budget_ms=args.time_budget_ms,
             num_hidden_samples=args.num_hidden_samples,
+            multi_self_decks=not args.single_config,
         )
     elif args.cmd in {"labels", "ranking-labels"}:
         build_label_dataset(
@@ -1516,6 +1909,8 @@ def main() -> None:
             max_nodes=args.max_nodes,
             time_budget_ms=args.time_budget_ms,
             clean_evaluator=args.clean,
+            multi_self_decks=not args.single_config,
+            workers=args.workers,
         )
     elif args.cmd == "pretrain":
         pretrain_sequence_scorer(
@@ -1543,6 +1938,7 @@ def main() -> None:
             epochs=args.epochs,
             lr=args.lr,
             hidden_dim=args.hidden_dim,
+            hidden_dim2=args.hidden_dim2,
             max_features=args.max_features,
             min_feature_count=args.min_feature_count,
             max_examples=args.max_examples,
@@ -1553,6 +1949,8 @@ def main() -> None:
             grad_clip=args.grad_clip,
             normalization=args.normalization,
             feature_schema_version=args.feature_schema_version,
+            validation_fraction=args.validation_fraction,
+            exclude_features=() if args.include_linear_score else ("linear_score",),
         )
         print(json.dumps(summary, indent=2))
     elif args.cmd == "self-play":

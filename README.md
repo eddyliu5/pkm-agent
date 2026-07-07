@@ -61,14 +61,16 @@ Run the batch validation/package flow:
 ./scripts/train_clean_models.sh
 ```
 
-## Clean Architecture Training
+## Full-Schema MLP Ranking Training
 
-The clean path keeps the simulator-backed sequence tree but removes direct probability/value/resource/threat/card-attention features from final candidate scoring. It trains:
+The default training path keeps the simulator-backed sequence tree, uses linear weights for search expansion/pruning, and trains the MLP to own final candidate ranking. Replay labels use each player's submitted replay deck by default, deriving deck-specific roles and plan context from `data/deck_db/decks.json` when the list matches and from a synthetic replay config when it does not. The MLP receives full-schema candidate context, including action, board, consequence, self-deck archetype/plan, opponent, probability, risk/counterplay, card-knowledge, and field-attention features. Scorer-generated `linear_score` and `mlp_score` diagnostics are excluded from MLP training features.
 
-- clean linear sequence weights
-- clean MLP sequence ranker
+It trains:
 
-Run the full clean training pipeline:
+- full-schema linear sequence weights for search/planning support
+- full-schema two-hidden-layer MLP sequence ranker selected by validation top-1
+
+Run the full training pipeline:
 
 ```bash
 ./scripts/train_clean_models.sh
@@ -80,30 +82,39 @@ For a pilot run:
 MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 ./scripts/train_clean_models.sh
 ```
 
-Include clean self-play fine-tuning after replay pretraining:
+Include self-play fine-tuning after replay pretraining:
 
 ```bash
 RUN_SELF_PLAY=1 SELF_PLAY_GAMES=5000 ./scripts/train_clean_models.sh
 ```
 
-Evaluate clean checkpoints:
+Evaluate checkpoints against varied decks, including replay-observed top win-rate deck rotations:
 
 ```bash
+RUN_BASELINE_EVAL=1 BASELINE_EVAL_GAMES=100 ./scripts/train_clean_models.sh
+
 ./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-clean-mlp:artifacts/checkpoints/clean_mlp_ranker/best.json,artifacts/checkpoints/clean_sequence_linear/best.json \
+  --agent sequence-mlp:artifacts/checkpoints/full_mlp_ranker/best.json,artifacts/checkpoints/full_sequence_linear/best.json \
   --opponent heuristic \
+  --games 100
+
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent sequence-mlp:artifacts/checkpoints/full_mlp_ranker/best.json,artifacts/checkpoints/full_sequence_linear/best.json \
+  --opponent deck-heuristic \
+  --opponent-decks top_winrate \
   --games 100
 ```
 
-Package a clean submission:
+Package a full-schema MLP submission:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.submission \
-  --clean \
-  --weights artifacts/checkpoints/clean_sequence_linear/best.json \
-  --mlp-model artifacts/checkpoints/clean_mlp_ranker/best.json \
-  --output artifacts/submission/clean_sequence_submission.tar.gz
+  --weights artifacts/checkpoints/full_sequence_linear/best.json \
+  --mlp-model artifacts/checkpoints/full_mlp_ranker/best.json \
+  --output artifacts/submission/full_mlp_sequence_submission.tar.gz
 ```
+
+For clean-schema ablations, run `TRAIN_SCHEMA=clean ./scripts/train_clean_models.sh`.
 
 ## Replay Imitation And Self-Play
 
@@ -117,7 +128,7 @@ Fetch top-team replay JSON with the Kaggle CLI after joining the competition and
   --episodes-per-submission 50
 ```
 
-Convert replay decisions into sequence labels. This matches each high-Elo selected action against simulator-generated candidate sequences and stores the candidate feature set plus the expert label:
+Convert replay decisions into sequence labels. This extracts the submitted 60-card decks from the replay, scores each player's decisions with that player's deck-specific config, matches each high-Elo selected action against simulator-generated candidate sequences, and stores the candidate feature set plus the expert label:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.replay_pipeline labels \
@@ -128,6 +139,8 @@ Convert replay decisions into sequence labels. This matches each high-Elo select
   --max-depth 12 \
   --max-nodes 512
 ```
+
+Use `--single-config` only for old single-deck ablations that force every replay through the configured default deck.
 
 Pretrain the sequence scorer with imitation learning:
 
@@ -145,13 +158,16 @@ Pretrain the dependency-light MLP sequence ranker on the same candidate-label JS
   --labels artifacts/replay_labels/high_elo_sequence_labels.jsonl \
   --out-dir artifacts/checkpoints/mlp_ranker \
   --epochs 5 \
-  --hidden-dim 128 \
-  --max-features 256
+  --hidden-dim 0 \
+  --hidden-dim2 0 \
+  --max-features 512 \
+  --validation-fraction 0.10 \
+  --feature-schema-version full
 ```
 
-The MLP checkpoint is a JSON file with its feature vocabulary, input normalization stats, and weights. It is intentionally framework-free so it can be loaded later without adding PyTorch or TensorFlow to the submission bundle.
+The MLP checkpoint is a JSON file with its feature vocabulary, input normalization stats, two hidden layers, validation metrics, and weights. It is intentionally framework-free so it can be loaded later without adding PyTorch or TensorFlow to the submission bundle.
 
-The runtime is intentionally strict. New MLP checkpoints must declare an explicit feature schema such as `sequence_v3_full` or `sequence_v3_clean`; legacy/unversioned checkpoints are unnecessary for the current workflow and should be retrained from scratch after architecture changes.
+The runtime is intentionally strict. New MLP checkpoints must declare an explicit feature schema such as `full` or `clean`; legacy/unversioned checkpoints are unnecessary for the current workflow and should be retrained from scratch after architecture changes.
 
 Fine-tune the MLP ranker with self-play returns:
 

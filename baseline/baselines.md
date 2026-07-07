@@ -16,9 +16,9 @@ These are valid `--agent` specs for the current evaluator.
 | `sequence-starmie-froslass` | Saved Starmie/Froslass sequence submission weights from `artifacts/submission/sequence_starmie_froslass_submission.tar.gz`. | Regression gate against the current best Kaggle-scoring local artifact. |
 | `sequence:<weights.json>` | Sequence search with learned linear weights. | Unnecessary for the current improvement path; keep only as an ablation/debug baseline. |
 | `sequence-mlp:<mlp.json>` | Sequence search with an MLP ranker. | Compare MLP checkpoints against default sequence and learned-linear variants. |
-| `sequence-mlp:<mlp.json>,<weights.json>` | MLP ranker plus learned linear weights. | Unnecessary unless explicitly testing a combined ablation; prefer schema-strict MLP-only comparisons first. |
+| `sequence-mlp:<mlp.json>,<weights.json>` | Linear weights for search/fallback plus MLP-only final ranking. | Main full-schema trained checkpoint shape; final ranking defaults to `linear_score_weight=0.0`, `mlp_score_weight=1.0`. |
 | `sequence-clean` | Clean evaluator path without direct probability/value/resource/threat/card-attention final scoring. | Architecture experiments and clean scoring regressions. |
-| `sequence-clean-mlp:<mlp.json>,<weights.json>` | Clean evaluator plus trained MLP and weights. | Candidate clean-architecture submission testing. |
+| `sequence-clean-mlp:<mlp.json>,<weights.json>` | Clean evaluator plus linear search weights and MLP-only final ranking. | Clean-schema ablation testing. |
 
 ## Opponent Baselines
 
