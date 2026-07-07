@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from types import SimpleNamespace
 import inspect
 import json
@@ -12,7 +13,7 @@ import sys
 from pathlib import Path
 
 from .belief import PrizeTracker
-from .actions import legal_actions, sanitize_selection
+from .actions import ActionView, legal_actions, sanitize_selection
 from .config import load_config, read_deck
 from .decision_engine import DecisionEngine
 from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_decks, load_deck_db, rank_decks_by_observed_cards, validate_deck
@@ -27,14 +28,12 @@ from .planning.pruning import SequencePruner
 from .replay_pipeline import (
     build_candidate_coverage_dataset,
     build_label_dataset,
-    build_reply_risk_dataset,
     compact_label_dataset,
     pretrain_sequence_scorer,
     rl_self_play_mlp,
 )
-from .reply_risk import ReplyRiskModel, train_reply_risk_model
 from .runtime import RuntimeAdapter
-from .sequence import SearchTree, SelectionStep, SequenceSearchConfig
+from .sequence import CandidateSequence, SearchTree, SelectionStep, SequenceSearchConfig
 from .sequence.types import EvaluatedSequenceView
 from .state import AgentState, CardView, PokemonView, build_agent_state
 from .submission import build_submission
@@ -308,6 +307,98 @@ def test_search_tree_reconstructs_leaf_sequence() -> None:
     assert sequence.score == 30.0
 
 
+def _fake_action_view(index: int, *, option_type: str = "YES", label: str = "choose yes") -> ActionView:
+    return ActionView(
+        index=index,
+        option=SimpleNamespace(number=None),
+        select_type="MAIN",
+        context="MAIN",
+        option_type=option_type,
+        source_player_index=0,
+        source_card_id=None,
+        source_name=None,
+        target_player_index=None,
+        target_card_id=None,
+        target_name=None,
+        attack_id=None,
+        attack_name=None,
+        label=label,
+    )
+
+
+def _fake_observed_for_warm_start(state: AgentState, actions: tuple[ActionView, ...]):
+    option_count = max((action.index for action in actions), default=-1) + 1
+    observation = SimpleNamespace(select=SimpleNamespace(option=[object() for _ in range(option_count)], minCount=1, maxCount=1))
+    return SimpleNamespace(
+        observation=observation,
+        actions=actions,
+        state=replace(state, legal_actions=actions, select_option_count=option_count),
+        belief=SimpleNamespace(opponent=SimpleNamespace(intent=None)),
+    )
+
+
+def test_decision_engine_warm_start_reuses_valid_remainder() -> None:
+    config = load_config()
+    deck = read_deck(config=config)
+    engine = DecisionEngine(deck=deck, config=config)
+    state = _memory_state(turn=3)
+    first_action = _fake_action_view(0, label="choose yes")
+    next_action = _fake_action_view(1, option_type="NO", label="choose no")
+    observed = _fake_observed_for_warm_start(state, (first_action, next_action))
+    sequence = CandidateSequence(
+        steps=(
+            SelectionStep((0,), (first_action,), "MAIN", "MAIN", {"first": 1.0}, 3.0, ("first",)),
+            SelectionStep((1,), (next_action,), "MAIN", "MAIN", {"second": 1.0}, 5.0, ("second",)),
+        ),
+        observation=SimpleNamespace(current="predicted-final"),
+        state=observed.state,
+        planner_score=8.0,
+        terminal=True,
+        used_search=True,
+        generation_tags=("simulated", "sample_0"),
+        sim_result="terminal",
+    )
+    engine._cache_warm_start(observed, SimpleNamespace(candidate=sequence), [0])
+
+    next_observed = _fake_observed_for_warm_start(state, (next_action,))
+    sequences = engine._ensure_warm_start_candidate(next_observed, [])
+
+    assert len(sequences) == 1
+    assert sequences[0].first_selection == [1]
+    assert sequences[0].steps[0].actions == (next_action,)
+    assert "warm_start" in sequences[0].generation_tags
+    assert engine.last_warm_start_status == "used"
+
+
+def test_decision_engine_warm_start_clears_on_action_mismatch() -> None:
+    config = load_config()
+    deck = read_deck(config=config)
+    engine = DecisionEngine(deck=deck, config=config)
+    state = _memory_state(turn=3)
+    first_action = _fake_action_view(0, label="choose yes")
+    cached_next_action = _fake_action_view(1, option_type="NO", label="choose no")
+    observed = _fake_observed_for_warm_start(state, (first_action, cached_next_action))
+    sequence = CandidateSequence(
+        steps=(
+            SelectionStep((0,), (first_action,), "MAIN", "MAIN", {"first": 1.0}, 3.0, ("first",)),
+            SelectionStep((1,), (cached_next_action,), "MAIN", "MAIN", {"second": 1.0}, 5.0, ("second",)),
+        ),
+        observation=SimpleNamespace(current="predicted-final"),
+        state=observed.state,
+        planner_score=8.0,
+        terminal=True,
+        used_search=True,
+    )
+    engine._cache_warm_start(observed, SimpleNamespace(candidate=sequence), [0])
+
+    different_current_action = _fake_action_view(1, option_type="YES", label="choose yes")
+    next_observed = _fake_observed_for_warm_start(state, (different_current_action,))
+
+    assert engine._ensure_warm_start_candidate(next_observed, []) == []
+    assert engine.pending_warm_start is None
+    assert engine.last_warm_start_status == "cleared:action_mismatch"
+
+
 def test_prize_tracker_deck_reveal_infers_known_prizes() -> None:
     config = load_config()
     deck = read_deck(config=config)
@@ -388,7 +479,7 @@ def test_sequence_decision_engine_smoke() -> None:
             search_config=SequenceSearchConfig(beam_width=4, max_depth=3, max_nodes=24, time_budget_ms=250),
         )
         observed = engine.observe(obs)
-        assert engine.fallback.__class__.__name__ == "FallbackLinearPolicy"
+        assert engine.fallback.__class__.__name__ == "LinearQPolicy"
         assert observed.state.legal_actions
         assert observed.probabilities == observed.belief.probabilities
         assert observed.game_plan.turn_plan.primary_goal
@@ -557,6 +648,35 @@ def test_replay_pipeline_smoke() -> None:
         coverage_record = json.loads(coverage_labels_path.read_text(encoding="utf-8").splitlines()[0])
         assert coverage_record["hidden_samples_used"]
 
+        lagged_replay_path = tmp_path / "episode-2-replay.json"
+        lagged_replay_path.write_text(
+            json.dumps(
+                {
+                    "id": "synthetic-lagged",
+                    "info": {"publicScore": 1800},
+                    "steps": [
+                        [{"observation": obs_dict, "action": [], "reward": 0, "status": "ACTIVE"}],
+                        [{"observation": obs_dict, "action": selected, "reward": 0, "status": "ACTIVE"}],
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        lagged_coverage_path = tmp_path / "lagged_coverage_labels.jsonl"
+        lagged_summary = build_candidate_coverage_dataset(
+            [str(lagged_replay_path)],
+            output=str(lagged_coverage_path),
+            max_examples=1,
+            beam_width=2,
+            max_depth=2,
+            max_nodes=16,
+            time_budget_ms=250,
+        )
+        assert lagged_summary["examples"] == 1
+        assert lagged_summary["expert_action_in_candidates_rate"] == 1.0
+        lagged_record = json.loads(lagged_coverage_path.read_text(encoding="utf-8").splitlines()[0])
+        assert lagged_record["step_index"] == 0
+
         clean_labels_path = tmp_path / "clean_labels.jsonl"
         clean_label_summary = build_label_dataset(
             [str(replay_path)],
@@ -574,25 +694,6 @@ def test_replay_pipeline_smoke() -> None:
         clean_features = clean_record["candidates"][0]["features"]
         assert "value_model_score" not in clean_features
         assert not any(key.startswith("p_") for key in clean_features)
-
-        reply_labels_path = tmp_path / "reply_labels.jsonl"
-        reply_summary = build_reply_risk_dataset([str(replay_path)], output=str(reply_labels_path), max_examples=1)
-        assert reply_summary["examples"] == 1
-        reply_train_summary = train_reply_risk_model(
-            str(reply_labels_path),
-            out_dir=str(tmp_path / "reply_risk"),
-            epochs=1,
-            lr=0.001,
-            max_features=32,
-            min_feature_count=1,
-            max_examples=1,
-        )
-        assert Path(reply_train_summary["latest_checkpoint"]).exists()
-        reply_model = ReplyRiskModel.from_file(reply_train_summary["latest_checkpoint"])
-        reply_record = json.loads(reply_labels_path.read_text(encoding="utf-8").splitlines()[0])
-        predictions = reply_model.predict_proba(reply_record["features"])
-        assert "selected_attack" in predictions
-        assert all(0.0 <= value <= 1.0 for value in predictions.values())
 
         compact_path = tmp_path / "compact_labels.jsonl"
         compact_summary = compact_label_dataset(str(labels_path), output=str(compact_path))
@@ -652,6 +753,33 @@ def test_replay_pipeline_smoke() -> None:
         assert "weights.json" in names
 
 
+def test_top_replay_planner_candidate_coverage() -> None:
+    replay_dir = Path("artifacts/replays/kaggle/pokemon-tcg-ai-battle")
+    if not replay_dir.exists() or not any(replay_dir.glob("episode-*-replay.json")):
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        output = Path(tmp) / "top_replay_coverage.jsonl"
+        summary = build_candidate_coverage_dataset(
+            [str(replay_dir)],
+            output=str(output),
+            max_examples=320,
+            beam_width=8,
+            max_depth=8,
+            max_nodes=128,
+            time_budget_ms=500,
+        )
+        assert summary["examples"] > 0
+        assert summary["expert_action_in_candidates"] == summary["examples"]
+        assert summary["expert_action_in_candidates_rate"] == 1.0
+        multi_select_seen = False
+        for line in output.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            assert record["matched"], record["action_type"]
+            assert record["coverage"]["missing_first_actions"] == []
+            multi_select_seen = multi_select_seen or len(record["selected"]) > 1
+        assert multi_select_seen
+
+
 def main() -> None:
     test_action_state_reward_smoke()
     test_episode_smoke()
@@ -663,6 +791,8 @@ def main() -> None:
     test_opponent_memory_setup_tag_clears_after_evolution()
     test_probability_model_hypergeometric_features()
     test_search_tree_reconstructs_leaf_sequence()
+    test_decision_engine_warm_start_reuses_valid_remainder()
+    test_decision_engine_warm_start_clears_on_action_mismatch()
     test_prize_tracker_deck_reveal_infers_known_prizes()
     test_sequence_decision_engine_smoke()
     test_clean_architecture_sequence_boundaries()
@@ -670,6 +800,7 @@ def main() -> None:
     test_hidden_sample_planning_diagnostics()
     test_sequence_policy_episode_smoke()
     test_replay_pipeline_smoke()
+    test_top_replay_planner_candidate_coverage()
     print("smoke tests passed")
 
 

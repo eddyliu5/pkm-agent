@@ -66,9 +66,12 @@ except FileNotFoundError:
             CONFIG = load_config(ROOT / "configs" / "mega_lucario.json")
         except FileNotFoundError:
             CONFIG = load_config()
+RUNTIME_OPTIONS = _load_runtime_options(ROOT)
 WEIGHTS = _load_weights(ROOT)
 MLP_RANKER = _load_mlp_ranker(ROOT)
-RUNTIME_OPTIONS = _load_runtime_options(ROOT)
+MLP_ENABLED = bool(RUNTIME_OPTIONS.get("mlp_enabled", MLP_RANKER is not None))
+if MLP_ENABLED and MLP_RANKER is None:
+    raise FileNotFoundError("runtime_config enables MLP, but mlp_model.json is missing")
 ADAPTER = RuntimeAdapter()
 ENGINE = DecisionEngine(
     deck=DECK,
@@ -77,9 +80,10 @@ ENGINE = DecisionEngine(
     mlp_ranker=MLP_RANKER,
     clean_evaluator=bool(RUNTIME_OPTIONS.get("clean_evaluator", False)),
     probability_features_enabled=bool(RUNTIME_OPTIONS.get("probability_features_enabled", True)),
-    mlp_enabled=bool(RUNTIME_OPTIONS.get("mlp_enabled", True)),
+    mlp_enabled=MLP_ENABLED,
     value_proxy_enabled=bool(RUNTIME_OPTIONS.get("value_proxy_enabled", True)),
     fallback_guardrail_enabled=bool(RUNTIME_OPTIONS.get("fallback_guardrail_enabled", True)),
+    engine_exception_fallback_enabled=bool(RUNTIME_OPTIONS.get("engine_exception_fallback_enabled", False)),
     linear_score_weight=float(RUNTIME_OPTIONS.get("linear_score_weight", 1.0)),
     mlp_score_weight=float(RUNTIME_OPTIONS.get("mlp_score_weight", 5.0)),
     search_config=SequenceSearchConfig(

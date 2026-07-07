@@ -21,11 +21,6 @@ from .engine import EpisodeResult
 from .features import combine_feature_dicts, extract_action_features, score_features
 from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
 from .policy import RandomPolicy, load_weights
-from .reply_risk import (
-    extract_reply_risk_features,
-    reply_risk_labels_from_state_and_actions,
-    train_reply_risk_model,
-)
 from .reward import transition_reward
 from .sequence import SequenceSearchConfig, default_clean_sequence_weights, default_sequence_weights
 from .state import build_agent_state
@@ -314,6 +309,10 @@ def _selected_action(action: Any) -> list[int]:
     return []
 
 
+def _selection_match_key(selected: list[int]) -> tuple[int, ...]:
+    return tuple(sorted(int(index) for index in selected))
+
+
 def _observation_dict(step: dict[str, Any]) -> dict[str, Any] | None:
     obs = step.get("observation") or step.get("obs")
     if isinstance(obs, dict) and isinstance(obs.get("observation"), dict):
@@ -333,6 +332,7 @@ def iter_replay_decisions(paths: Iterable[str | Path], *, min_rating: float | No
             steps = payload.get("steps")
             if not isinstance(steps, list):
                 continue
+            pending_observations: dict[int, tuple[int, dict[str, Any]]] = {}
             for step_index, step in enumerate(steps):
                 if isinstance(step, dict):
                     agents = [step]
@@ -345,17 +345,22 @@ def iter_replay_decisions(paths: Iterable[str | Path], *, min_rating: float | No
                         continue
                     obs = _observation_dict(agent_step)
                     selected = _selected_action(agent_step.get("action"))
-                    if obs is None or not selected:
-                        continue
-                    yield ReplayDecision(
-                        source=str(path),
-                        episode_id=episode_id,
-                        step_index=step_index,
-                        player_index=player_index,
-                        observation=obs,
-                        selected=selected,
-                        rating=rating,
-                    )
+                    if selected:
+                        pending = pending_observations.pop(player_index, None)
+                        decision_step = pending[0] if pending is not None else step_index
+                        decision_obs = pending[1] if pending is not None else obs
+                        if decision_obs is not None:
+                            yield ReplayDecision(
+                                source=str(path),
+                                episode_id=episode_id,
+                                step_index=decision_step,
+                                player_index=player_index,
+                                observation=decision_obs,
+                                selected=selected,
+                                rating=rating,
+                            )
+                    if isinstance(obs, dict) and obs.get("select") is not None:
+                        pending_observations[player_index] = (step_index, obs)
 
 
 def _compact_features(features: dict[str, float]) -> dict[str, float]:
@@ -450,8 +455,8 @@ def build_candidate_coverage_dataset(
             if not candidates:
                 stats["candidate_errors"] += 1
                 continue
-            selected_key = tuple(selected)
-            matched = any(tuple(sequence.first_selection) == selected_key for sequence in candidates)
+            selected_key = _selection_match_key(selected)
+            matched = any(_selection_match_key(sequence.first_selection) == selected_key for sequence in candidates)
             selected_actions = [action for action in observed.actions if action.index in selected]
             action_type = "+".join(action.label for action in selected_actions) or "unknown"
             action_type_totals[action_type] = action_type_totals.get(action_type, 0) + 1
@@ -561,8 +566,8 @@ def build_label_dataset(
                 stats["candidate_errors"] += 1
                 continue
             sequences.sort(key=lambda sequence: sequence.score, reverse=True)
-            selected_key = tuple(selected)
-            label_index = next((index for index, sequence in enumerate(sequences) if tuple(sequence.first_selection) == selected_key), -1)
+            selected_key = _selection_match_key(selected)
+            label_index = next((index for index, sequence in enumerate(sequences) if _selection_match_key(sequence.first_selection) == selected_key), -1)
             kept = sequences[:max_candidates]
             if label_index >= max_candidates:
                 kept = kept[:-1] + [sequences[label_index]]
@@ -583,60 +588,6 @@ def build_label_dataset(
             fh.write(json.dumps(record, sort_keys=True) + "\n")
             stats["examples"] += 1
             stats["matched" if label_index >= 0 else "unmatched"] += 1
-    print(json.dumps(stats, indent=2))
-    return stats
-
-
-def build_reply_risk_dataset(
-    inputs: list[str],
-    *,
-    output: str = "artifacts/reply_risk/replay_reply_risk_labels.jsonl",
-    config_path: str | None = None,
-    min_rating: float | None = None,
-    max_examples: int | None = None,
-) -> dict[str, Any]:
-    config = load_config(config_path)
-    output_path = Path(output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    stats = {
-        "inputs": inputs,
-        "output": str(output_path),
-        "examples": 0,
-        "parse_errors": 0,
-        "invalid_selections": 0,
-        "empty_actions": 0,
-    }
-    with output_path.open("w", encoding="utf-8") as fh:
-        for decision in iter_replay_decisions(inputs, min_rating=min_rating):
-            if max_examples is not None and stats["examples"] >= max_examples:
-                break
-            try:
-                obs = to_observation_class(decision.observation)
-                actions = legal_actions(obs)
-                state = build_agent_state(obs, actions=actions)
-            except Exception:
-                stats["parse_errors"] += 1
-                continue
-            if obs.select is None or not actions:
-                stats["empty_actions"] += 1
-                continue
-            selected, invalid = sanitize_selection(obs, decision.selected)
-            if invalid:
-                stats["invalid_selections"] += 1
-                continue
-            selected_actions = [action for action in actions if action.index in selected]
-            record = {
-                "source": decision.source,
-                "episode_id": decision.episode_id,
-                "step_index": decision.step_index,
-                "player_index": decision.player_index,
-                "rating": decision.rating,
-                "selected": selected,
-                "features": _compact_features(extract_reply_risk_features(state, config)),
-                "labels": reply_risk_labels_from_state_and_actions(state, selected_actions, config),
-            }
-            fh.write(json.dumps(record, sort_keys=True) + "\n")
-            stats["examples"] += 1
     print(json.dumps(stats, indent=2))
     return stats
 
@@ -1446,25 +1397,6 @@ def main() -> None:
     ranking_labels.add_argument("--time-budget-ms", type=int, default=1000)
     ranking_labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
 
-    reply_labels = sub.add_parser("reply-labels", help="Build hidden-capability/reply-risk labels from replay decisions.")
-    reply_labels.add_argument("inputs", nargs="+")
-    reply_labels.add_argument("--output", default="artifacts/reply_risk/replay_reply_risk_labels.jsonl")
-    reply_labels.add_argument("--config", default=None)
-    reply_labels.add_argument("--min-rating", type=float, default=None)
-    reply_labels.add_argument("--max-examples", type=int, default=None)
-
-    train_reply = sub.add_parser("train-reply-risk", help="Train the hidden-capability/reply-risk model.")
-    train_reply.add_argument("--labels", required=True)
-    train_reply.add_argument("--out-dir", default="artifacts/checkpoints/reply_risk")
-    train_reply.add_argument("--epochs", type=int, default=5)
-    train_reply.add_argument("--lr", type=float, default=0.01)
-    train_reply.add_argument("--l2", type=float, default=1e-6)
-    train_reply.add_argument("--max-features", type=int, default=512)
-    train_reply.add_argument("--min-feature-count", type=int, default=2)
-    train_reply.add_argument("--max-examples", type=int, default=None)
-    train_reply.add_argument("--input-clip", type=float, default=8.0)
-    train_reply.add_argument("--grad-clip", type=float, default=5.0)
-
     pretrain = sub.add_parser("pretrain", help="Supervised pretrain sequence weights from labels.")
     pretrain.add_argument("--labels", required=True)
     pretrain.add_argument("--out-dir", default="artifacts/checkpoints/replay_pretrain")
@@ -1497,7 +1429,7 @@ def main() -> None:
     pretrain_mlp.add_argument("--input-clip", type=float, default=8.0)
     pretrain_mlp.add_argument("--grad-clip", type=float, default=5.0)
     pretrain_mlp.add_argument("--normalization", choices=("sparse", "standard"), default="sparse")
-    pretrain_mlp.add_argument("--feature-schema-version", choices=("legacy", "sequence_v3_full", "sequence_v3_clean"), default="legacy")
+    pretrain_mlp.add_argument("--feature-schema-version", choices=("sequence_v3_full", "sequence_v3_clean"), default="sequence_v3_full")
 
     rl = sub.add_parser("self-play", help="Fine-tune sequence weights with self-play returns.")
     rl.add_argument("--games", type=int, default=500)
@@ -1584,27 +1516,6 @@ def main() -> None:
             max_nodes=args.max_nodes,
             time_budget_ms=args.time_budget_ms,
             clean_evaluator=args.clean,
-        )
-    elif args.cmd == "reply-labels":
-        build_reply_risk_dataset(
-            args.inputs,
-            output=args.output,
-            config_path=args.config,
-            min_rating=args.min_rating,
-            max_examples=args.max_examples,
-        )
-    elif args.cmd == "train-reply-risk":
-        train_reply_risk_model(
-            args.labels,
-            out_dir=args.out_dir,
-            epochs=args.epochs,
-            lr=args.lr,
-            l2=args.l2,
-            max_features=args.max_features,
-            min_feature_count=args.min_feature_count,
-            max_examples=args.max_examples,
-            input_clip=args.input_clip,
-            grad_clip=args.grad_clip,
         )
     elif args.cmd == "pretrain":
         pretrain_sequence_scorer(

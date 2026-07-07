@@ -6,7 +6,9 @@
 observe -> plan -> evaluate -> act
 ```
 
-`DecisionEngine` is the runtime orchestrator. It owns the long-lived opponent memory, observation builder, sequence simulator, sequence evaluator, action selector, and fallback policy. The engine exposes each stage as a public method for testing and diagnostics, while `choose(obs)` runs the full loop and returns one immediate simulator selection.
+`DecisionEngine` is the runtime orchestrator. It owns the long-lived opponent memory, observation builder, sequence simulator, sequence evaluator, action selector, and fallback policy. The engine exposes each stage as a public method for testing and diagnostics, while `choose(obs)` runs the full loop and returns one immediate simulator selection. Runtime execution is fail-fast by default: planner, evaluator, model-loading, or schema errors should raise instead of silently falling back.
+
+When the selected candidate has additional planned steps, `DecisionEngine` caches the uncommitted suffix as a warm-start continuation. On the next callback in the same player turn, planning may prepend that suffix as a candidate if the cached next step still matches the current legal option identity. The continuation still competes with freshly generated candidates and is cleared on fallback, turn/player changes, invalid selections, or option mismatch.
 
 Module-level details live in each folder's `README.md`. This document is the package-level map and should be updated whenever a feature changes the runtime architecture.
 
@@ -70,7 +72,9 @@ Important sequence types:
 - `SearchTree`/`SearchNode`: parent-linked simulator search tree with path reconstruction.
 - `CandidateSequence`: immutable planned line with steps, final observation/state, search metadata, generation tags, and simulator result.
 
-If simulator search is unavailable or fails, planning falls back to single-step candidate generation. `DecisionEngine` also ensures the fallback linear-policy action is represented as a candidate when it is legal and missing.
+If simulator search is unavailable, planning may still include single-step candidates. Search or evaluation failures are not hidden in the runtime path. `DecisionEngine` also ensures the fallback linear-policy action is represented as a candidate when it is legal and missing; this is candidate coverage, not an exception fallback.
+
+Planning can also receive a validated warm-start continuation from the previous chosen sequence. This is treated as one additional candidate, not as a forced action queue.
 
 ## Evaluation Layer
 
@@ -85,7 +89,7 @@ If simulator search is unavailable or fails, planning falls back to single-step 
 - opponent-counterplay score
 - plan-priority bonus
 
-The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`; compatibility views are created only when older training/evaluation code expects sequence-shaped scored objects.
+The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`.
 
 `sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, game-plan, resource, threat, opponent, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs.
 
@@ -93,7 +97,9 @@ The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not m
 
 `acting/` converts evaluated candidates into one legal immediate selection.
 
-`ActionSelector` chooses the top-ranked candidate in eval mode and samples from candidate scores in train mode. `FallbackGuardrail` can override the evaluator in eval mode when the fallback linear policy is safer and the chosen candidate is not convincingly better. All final selections are passed through `sanitize_selection`; invalid selections fall back to `FallbackLinearPolicy`.
+`ActionSelector` chooses the top-ranked candidate in eval mode and samples from candidate scores in train mode. `FallbackGuardrail` can override the evaluator in eval mode when the fallback linear policy is safer and the chosen candidate is not convincingly better. All final selections are passed through `sanitize_selection`; invalid selections fall back to `LinearQPolicy`.
+
+Exception fallback is unnecessary for the current agent workflow and is disabled by default. If a runtime model, schema, feature, planner, or evaluator assumption is wrong, the process should fail and expose the defect.
 
 Decision traces record sequence count, whether simulator search was used, chosen score, chosen labels, and any fallback reason.
 
@@ -103,11 +109,17 @@ The agent reasons primarily over integer card IDs.
 
 Card IDs come from `deck.csv`, `configs/*.json`, simulator observations, and `data/deck_db/decks.json`. `card_db.py` and `knowledge.py` attach metadata, strategic roles, card embeddings, evolution flags, attack data, energy classification, and prize values. Config card groups drive game-plan features, action labels, probability summaries, and deck-specific heuristic behavior.
 
-Trainable or learned components are intentionally replaceable:
+Trainable or learned components are intentionally replaceable, but only the MLP ranker is the current improvement target:
 
-- linear weights in `weights.json`
 - JSON MLP sequence rankers in `mlp_model.json`
-- sequence feature schemas in `SequenceFeaturizer` and `CleanSequenceFeaturizer`
-- training and replay utilities in `train_linear.py`, `torch_mlp_trainer.py`, and `replay_pipeline.py`
+- explicit sequence feature schemas in `SequenceFeaturizer` and `CleanSequenceFeaturizer`
+- replay and MLP training utilities in `replay_pipeline.py`
+
+Unnecessary for the current workflow:
+
+- legacy/unversioned MLP feature schemas
+- silent exception fallback to the linear policy
+- training linear weights as the main improvement path
+- carrying backward-compatibility behavior for old checkpoints
 
 Runtime options in `runtime_config.json` can enable or disable clean evaluation, probability features, MLP scoring, value proxy scoring, fallback guardrails, score weights, and hidden sample count.

@@ -22,6 +22,8 @@ act:
   -> selected candidate.first_selection returned to the simulator
 ```
 
+After acting, any uncommitted suffix of the chosen sequence is cached as a warm-start candidate for the next callback in the same turn. It is reused only if the next cached step still matches the current legal option identity, and it is still evaluated against freshly generated alternatives.
+
 ## Current Defaults
 
 - Default deck/config: `configs/starmie_froslass.json`
@@ -56,7 +58,7 @@ Build the current submission:
 Run the batch validation/package flow:
 
 ```bash
-./.venv/bin/python -m pokemon_agent.overnight --baseline-games 100
+./scripts/train_clean_models.sh
 ```
 
 ## Clean Architecture Training
@@ -65,7 +67,6 @@ The clean path keeps the simulator-backed sequence tree but removes direct proba
 
 - clean linear sequence weights
 - clean MLP sequence ranker
-- reply-risk/hidden-capability model
 
 Run the full clean training pipeline:
 
@@ -76,7 +77,7 @@ Run the full clean training pipeline:
 For a pilot run:
 
 ```bash
-MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 REPLY_EPOCHS=2 ./scripts/train_clean_models.sh
+MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 ./scripts/train_clean_models.sh
 ```
 
 Include clean self-play fine-tuning after replay pretraining:
@@ -150,20 +151,7 @@ Pretrain the dependency-light MLP sequence ranker on the same candidate-label JS
 
 The MLP checkpoint is a JSON file with its feature vocabulary, input normalization stats, and weights. It is intentionally framework-free so it can be loaded later without adding PyTorch or TensorFlow to the submission bundle.
 
-For larger notebook/GPU training runs, train with PyTorch and export the same framework-free JSON checkpoint:
-
-```bash
-python -m pokemon_agent.torch_mlp_trainer \
-  --labels artifacts/replay_labels/high_elo_sequence_labels.top16.compact.jsonl \
-  --out-dir artifacts/checkpoints/torch_mlp_ranker \
-  --epochs 20 \
-  --hidden-dim 128 \
-  --max-features 256 \
-  --batch-size 512 \
-  --device auto
-```
-
-`torch_mlp_trainer` requires PyTorch only in the training environment. The exported `best.json` still loads through the standard `MLPSequenceRanker`, so the Kaggle submission remains dependency-light.
+The runtime is intentionally strict. New MLP checkpoints must declare an explicit feature schema such as `sequence_v3_full` or `sequence_v3_clean`; legacy/unversioned checkpoints are unnecessary for the current workflow and should be retrained from scratch after architecture changes.
 
 Fine-tune the MLP ranker with self-play returns:
 
@@ -182,7 +170,7 @@ Evaluate an MLP checkpoint:
 ./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent random --games 100 --opponent-decks deck_db
 ```
 
-Evaluate an MLP checkpoint on top of learned sequence weights:
+Evaluate an MLP checkpoint on top of learned sequence weights. This is unnecessary for the current main path and should be used only as an ablation:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.eval \
@@ -199,7 +187,7 @@ Build an MLP submission:
   --output artifacts/submission/mlp_sequence_submission.tar.gz
 ```
 
-Build a combined sequence-weight plus MLP submission:
+Build a combined sequence-weight plus MLP submission. This is unnecessary unless the combined ablation beats the strict MLP-only path:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.submission \
@@ -208,74 +196,7 @@ Build a combined sequence-weight plus MLP submission:
   --output artifacts/submission/mlp_sequence_submission.tar.gz
 ```
 
-## Probability Feature Training Refresh
-
-The runtime now emits hidden-information probability features such as prize risk, energy access, and line accessibility. Existing MLP checkpoints do not use new feature names until labels are regenerated and the ranker is retrained.
-
-Regenerate replay labels with probability features:
-
-```bash
-./.venv/bin/python -m pokemon_agent.replay_pipeline labels \
-  artifacts/replays/kaggle \
-  --output artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
-  --min-rating 1400 \
-  --max-candidates 24 \
-  --beam-width 32 \
-  --max-depth 12 \
-  --max-nodes 512 \
-  --time-budget-ms 1000
-```
-
-Compact labels for MLP training:
-
-```bash
-./.venv/bin/python -m pokemon_agent.replay_pipeline compact-labels \
-  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
-  --output artifacts/replay_labels/high_elo_sequence_labels_probability.top16.compact.jsonl \
-  --max-candidates 16
-```
-
-Train refreshed sequence weights and MLP checkpoints:
-
-```bash
-./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain \
-  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
-  --out-dir artifacts/checkpoints/replay_pretrain_probability \
-  --epochs 5
-
-./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain-mlp \
-  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.top16.compact.jsonl \
-  --out-dir artifacts/checkpoints/mlp_ranker_probability \
-  --epochs 5 \
-  --hidden-dim 128 \
-  --max-features 320
-```
-
-Evaluate before packaging:
-
-```bash
-./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_probability/best.json,artifacts/checkpoints/replay_pretrain_probability/best.json \
-  --opponent heuristic \
-  --games 100
-
-./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_probability/best.json,artifacts/checkpoints/replay_pretrain_probability/best.json \
-  --opponent random \
-  --games 100 \
-  --opponent-decks deck_db
-```
-
-Build a refreshed submission:
-
-```bash
-./.venv/bin/python -m pokemon_agent.submission \
-  --weights artifacts/checkpoints/replay_pretrain_probability/best.json \
-  --mlp-model artifacts/checkpoints/mlp_ranker_probability/best.json \
-  --output artifacts/submission/mlp_probability_sequence_submission.tar.gz
-```
-
-Fine-tune with sequence-feature self-play returns:
+Fine-tune linear sequence weights with self-play returns. This is unnecessary for the current main path; keep it as an ablation/debug tool:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.replay_pipeline self-play \
@@ -294,6 +215,7 @@ Evaluate a trained checkpoint:
 
 ## Notes
 
-- `train_linear.py` and `LinearQPolicy` are retained as lightweight baseline/ablation infrastructure, not as part of the default sequence-agent workflow.
-- The Kaggle submission path remains dependency-light: no PyTorch runtime dependency is required.
+- `LinearQPolicy` is retained as a lightweight fallback/baseline policy, not as a standalone training path.
+- Legacy MLP schema compatibility and silent runtime fallback are unnecessary. Runtime/model/schema failures should fail fast and be fixed by regenerating labels and retraining.
+- The Kaggle submission path remains dependency-light and uses stdlib JSON MLP inference.
 - Deterministic reliability coverage includes deck-reveal prize inference and submission import checks.

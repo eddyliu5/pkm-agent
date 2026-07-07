@@ -14,9 +14,9 @@ These are valid `--agent` specs for the current evaluator.
 | `deck-heuristic:<deck_id>` | Static heuristic with roles derived from a specific `data/deck_db/decks.json` list. | Reproduce a known archetype or replay-derived deck baseline. |
 | `sequence` | Current default production baseline. | Main baseline for regressions and submissions. |
 | `sequence-starmie-froslass` | Saved Starmie/Froslass sequence submission weights from `artifacts/submission/sequence_starmie_froslass_submission.tar.gz`. | Regression gate against the current best Kaggle-scoring local artifact. |
-| `sequence:<weights.json>` | Sequence search with learned linear weights. | Compare new linear training checkpoints against the default sequence policy. |
+| `sequence:<weights.json>` | Sequence search with learned linear weights. | Unnecessary for the current improvement path; keep only as an ablation/debug baseline. |
 | `sequence-mlp:<mlp.json>` | Sequence search with an MLP ranker. | Compare MLP checkpoints against default sequence and learned-linear variants. |
-| `sequence-mlp:<mlp.json>,<weights.json>` | MLP ranker plus learned linear weights. | Main checkpoint comparison format for combined models. |
+| `sequence-mlp:<mlp.json>,<weights.json>` | MLP ranker plus learned linear weights. | Unnecessary unless explicitly testing a combined ablation; prefer schema-strict MLP-only comparisons first. |
 | `sequence-clean` | Clean evaluator path without direct probability/value/resource/threat/card-attention final scoring. | Architecture experiments and clean scoring regressions. |
 | `sequence-clean-mlp:<mlp.json>,<weights.json>` | Clean evaluator plus trained MLP and weights. | Candidate clean-architecture submission testing. |
 

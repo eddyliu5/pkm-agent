@@ -11,3 +11,5 @@ Overall architecture is documented in ./pokemon_agent/architecture.md, and indiv
 Each module must have an explicit purpose and target behavior. For trainable modules, also define the measurable goal or metric they optimize or are evaluated against, such as win rate, invalid-action rate, average reward, checkpoint score, evaluation score versus a baseline, or another task-specific metric.
 
 Refer to ./loop.md when adding or removing features.
+
+Reduce use of fallbacks: if a module fails, I want to know about it without silently failing and going to fallback.

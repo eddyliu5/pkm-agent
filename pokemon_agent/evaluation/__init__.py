@@ -4,7 +4,7 @@ from .counterplay_model import CounterplayModel
 from .risk_model import RiskModel
 from .score_calibration import ScoreCalibrator
 from .scoring import SequenceEvaluator
-from .value_proxy import HeuristicValueProxy, StateDeltaValueProxy
+from .value_proxy import HeuristicValueProxy
 
 __all__ = [
     "CounterplayModel",
@@ -12,5 +12,4 @@ __all__ = [
     "RiskModel",
     "ScoreCalibrator",
     "SequenceEvaluator",
-    "StateDeltaValueProxy",
 ]

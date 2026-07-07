@@ -10,7 +10,7 @@ cd "$ROOT_DIR"
 #   ./scripts/train_clean_models.sh
 #
 # Pilot run:
-#   MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 REPLY_EPOCHS=2 ./scripts/train_clean_models.sh
+#   MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 ./scripts/train_clean_models.sh
 #
 # Custom replay source:
 #   INPUTS="artifacts/replays/kaggle data/kaggle_replays" ./scripts/train_clean_models.sh
@@ -20,11 +20,9 @@ INPUTS="${INPUTS:-artifacts/replays/kaggle}"
 
 LABELS="${LABELS:-artifacts/replay_labels/clean_sequence_labels.jsonl}"
 COMPACT_LABELS="${COMPACT_LABELS:-artifacts/replay_labels/clean_sequence_labels.top16.compact.jsonl}"
-REPLY_LABELS="${REPLY_LABELS:-artifacts/reply_risk/replay_reply_risk_labels.jsonl}"
 
 SEQ_OUT="${SEQ_OUT:-artifacts/checkpoints/clean_sequence_linear}"
 MLP_OUT="${MLP_OUT:-artifacts/checkpoints/clean_mlp_ranker}"
-REPLY_OUT="${REPLY_OUT:-artifacts/checkpoints/reply_risk}"
 SEQ_SELF_PLAY_OUT="${SEQ_SELF_PLAY_OUT:-artifacts/checkpoints/clean_sequence_self_play}"
 MLP_SELF_PLAY_OUT="${MLP_SELF_PLAY_OUT:-artifacts/checkpoints/clean_mlp_self_play}"
 
@@ -39,10 +37,8 @@ TIME_BUDGET_MS="${TIME_BUDGET_MS:-1000}"
 
 SEQ_EPOCHS="${SEQ_EPOCHS:-5}"
 MLP_EPOCHS="${MLP_EPOCHS:-5}"
-REPLY_EPOCHS="${REPLY_EPOCHS:-5}"
 HIDDEN_DIM="${HIDDEN_DIM:-128}"
 MLP_MAX_FEATURES="${MLP_MAX_FEATURES:-256}"
-REPLY_MAX_FEATURES="${REPLY_MAX_FEATURES:-512}"
 RUN_SELF_PLAY="${RUN_SELF_PLAY:-0}"
 SELF_PLAY_GAMES="${SELF_PLAY_GAMES:-500}"
 SELF_PLAY_CHECKPOINT_EVERY="${SELF_PLAY_CHECKPOINT_EVERY:-100}"
@@ -60,10 +56,8 @@ split_inputs() {
 mkdir -p \
   "$(dirname "$LABELS")" \
   "$(dirname "$COMPACT_LABELS")" \
-  "$(dirname "$REPLY_LABELS")" \
   "$SEQ_OUT" \
   "$MLP_OUT" \
-  "$REPLY_OUT" \
   "$SEQ_SELF_PLAY_OUT" \
   "$MLP_SELF_PLAY_OUT"
 
@@ -84,16 +78,8 @@ label_cmd=(
   --clean
 )
 
-reply_label_cmd=(
-  "$PYTHON" -m pokemon_agent.replay_pipeline reply-labels
-  "${INPUT_ARRAY[@]}"
-  --output "$REPLY_LABELS"
-  --min-rating "$MIN_RATING"
-)
-
 if [[ -n "$MAX_EXAMPLES" ]]; then
   label_cmd+=(--max-examples "$MAX_EXAMPLES")
-  reply_label_cmd+=(--max-examples "$MAX_EXAMPLES")
 fi
 
 run "${label_cmd[@]}"
@@ -115,14 +101,6 @@ run "$PYTHON" -m pokemon_agent.replay_pipeline pretrain-mlp \
   --epochs "$MLP_EPOCHS" \
   --hidden-dim "$HIDDEN_DIM" \
   --max-features "$MLP_MAX_FEATURES"
-
-run "${reply_label_cmd[@]}"
-
-run "$PYTHON" -m pokemon_agent.replay_pipeline train-reply-risk \
-  --labels "$REPLY_LABELS" \
-  --out-dir "$REPLY_OUT" \
-  --epochs "$REPLY_EPOCHS" \
-  --max-features "$REPLY_MAX_FEATURES"
 
 if [[ "$RUN_SELF_PLAY" == "1" ]]; then
   run "$PYTHON" -m pokemon_agent.replay_pipeline self-play \
@@ -146,7 +124,6 @@ fi
 printf '\nClean training pipeline complete.\n'
 printf 'Clean sequence weights: %s\n' "${SEQ_OUT}/best.json"
 printf 'Clean MLP ranker:       %s\n' "${MLP_OUT}/best.json"
-printf 'Reply-risk model:       %s\n' "${REPLY_OUT}/best.json"
 printf 'Eval agent:             sequence-clean-mlp:%s,%s\n' "${MLP_OUT}/best.json" "${SEQ_OUT}/best.json"
 if [[ "$RUN_SELF_PLAY" == "1" ]]; then
   printf 'Self-play sequence:     %s\n' "${SEQ_SELF_PLAY_OUT}/best.json"

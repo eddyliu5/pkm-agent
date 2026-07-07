@@ -181,6 +181,7 @@ class SequencePolicy(Policy):
         mlp_enabled: bool = True,
         value_proxy_enabled: bool = True,
         fallback_guardrail_enabled: bool = True,
+        engine_exception_fallback_enabled: bool = False,
         num_hidden_samples: int = 1,
         seed: int | None = None,
     ):
@@ -203,6 +204,7 @@ class SequencePolicy(Policy):
             mlp_enabled=mlp_enabled,
             value_proxy_enabled=value_proxy_enabled,
             fallback_guardrail_enabled=fallback_guardrail_enabled,
+            engine_exception_fallback_enabled=engine_exception_fallback_enabled,
             search_config=SequenceSearchConfig(
                 beam_width=8,
                 max_depth=8,

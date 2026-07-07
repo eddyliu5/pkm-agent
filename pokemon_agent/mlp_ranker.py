@@ -155,7 +155,7 @@ class MLPSequenceRanker:
         input_clip: float = 8.0,
         activation: str = "relu",
         normalization: str = "standard",
-        feature_schema_version: str = "legacy",
+        feature_schema_version: str = "sequence_v3_full",
     ):
         if activation != "relu":
             raise ValueError(f"Unsupported activation: {activation}")
@@ -177,7 +177,9 @@ class MLPSequenceRanker:
         self.input_clip = float(input_clip)
         self.activation = activation
         self.normalization = normalization
-        self.feature_schema_version = str(feature_schema_version or "legacy")
+        if not feature_schema_version:
+            raise ValueError("MLP feature_schema_version is required")
+        self.feature_schema_version = str(feature_schema_version)
         input_dim = len(self.feature_names)
         if len(self.w1) != self.hidden_dim or any(len(row) != input_dim for row in self.w1):
             raise ValueError("w1 shape does not match hidden_dim x input_dim")
@@ -193,7 +195,7 @@ class MLPSequenceRanker:
         seed: int = 13,
         input_clip: float = 8.0,
         normalization: str = "sparse",
-        feature_schema_version: str = "legacy",
+        feature_schema_version: str = "sequence_v3_full",
     ) -> "MLPSequenceRanker":
         rng = random.Random(seed)
         input_dim = len(feature_stats.names)
@@ -233,7 +235,7 @@ class MLPSequenceRanker:
             input_clip=float(payload.get("input_clip", 8.0)),
             activation=str(payload.get("activation", "relu")),
             normalization=str(payload.get("normalization", "standard")),
-            feature_schema_version=str(payload.get("feature_schema_version", "legacy")),
+            feature_schema_version=str(payload["feature_schema_version"]),
         )
 
     @classmethod
@@ -260,7 +262,7 @@ class MLPSequenceRanker:
             "summary": summary or {},
         }
 
-    def validate_feature_schema(self, expected: str, *, allow_legacy: bool = True) -> None:
+    def validate_feature_schema(self, expected: str, *, allow_legacy: bool = False) -> None:
         actual = self.feature_schema_version
         if allow_legacy and actual == "legacy":
             return
@@ -418,7 +420,7 @@ def pretrain_mlp_ranker(
     input_clip: float = 8.0,
     grad_clip: float = 5.0,
     normalization: str = "sparse",
-    feature_schema_version: str = "legacy",
+    feature_schema_version: str = "sequence_v3_full",
 ) -> dict[str, Any]:
     stats = build_feature_stats(
         labels_path,

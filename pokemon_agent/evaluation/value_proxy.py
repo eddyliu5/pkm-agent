@@ -19,6 +19,3 @@ class HeuristicValueProxy:
         board_delta = float(len(state.my_bench) - len(root_state.my_bench)) / 5.0
         prize_value = (prize_gain - prize_loss) / 6.0
         return max(-1.0, min(1.0, prize_value + 0.25 * energy_delta + 0.1 * board_delta))
-
-
-StateDeltaValueProxy = HeuristicValueProxy

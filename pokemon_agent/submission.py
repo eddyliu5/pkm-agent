@@ -48,9 +48,10 @@ def build_submission(
             {
                 "clean_evaluator": bool(clean_evaluator),
                 "probability_features_enabled": True,
-                "mlp_enabled": True,
+                "mlp_enabled": bool(mlp_model_path),
                 "value_proxy_enabled": True,
                 "fallback_guardrail_enabled": True,
+                "engine_exception_fallback_enabled": False,
                 "num_hidden_samples": 1,
                 "linear_score_weight": 0.05 if clean_evaluator else 1.0,
                 "mlp_score_weight": 1.0 if clean_evaluator else 5.0,
