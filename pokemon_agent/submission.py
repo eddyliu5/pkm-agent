@@ -9,12 +9,14 @@ from pathlib import Path
 from .cg_loader import PROJECT_ROOT, cg_root
 from .config import DEFAULT_CONFIG, read_deck
 from .features import default_weights
+from .sequence import default_clean_sequence_weights
 
 
 def build_submission(
     weights_path: str | None = None,
     mlp_model_path: str | None = None,
     output: str = "artifacts/submission/submission.tar.gz",
+    clean_evaluator: bool = False,
 ) -> Path:
     output_path = Path(output)
     if not output_path.is_absolute():
@@ -33,12 +35,30 @@ def build_submission(
         with Path(weights_path).open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
         weights = payload.get("weights", payload)
+    elif clean_evaluator:
+        weights = default_clean_sequence_weights()
     else:
         weights = default_weights()
     with (build_dir / "weights.json").open("w", encoding="utf-8") as fh:
         json.dump({"weights": weights}, fh, indent=2, sort_keys=True)
     if mlp_model_path:
         shutil.copy2(Path(mlp_model_path), build_dir / "mlp_model.json")
+    with (build_dir / "runtime_config.json").open("w", encoding="utf-8") as fh:
+        json.dump(
+            {
+                "clean_evaluator": bool(clean_evaluator),
+                "probability_features_enabled": True,
+                "mlp_enabled": True,
+                "value_proxy_enabled": True,
+                "fallback_guardrail_enabled": True,
+                "num_hidden_samples": 1,
+                "linear_score_weight": 0.05 if clean_evaluator else 1.0,
+                "mlp_score_weight": 1.0 if clean_evaluator else 5.0,
+            },
+            fh,
+            indent=2,
+            sort_keys=True,
+        )
 
     (build_dir / "main.py").write_text("from pokemon_agent.runtime_agent import agent\n", encoding="utf-8")
     ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc")
@@ -70,8 +90,9 @@ def main() -> None:
     parser.add_argument("--weights", default=None)
     parser.add_argument("--mlp-model", default=None)
     parser.add_argument("--output", default="artifacts/submission/submission.tar.gz")
+    parser.add_argument("--clean", action="store_true", help="Package the clean sequence evaluator runtime.")
     args = parser.parse_args()
-    build_submission(weights_path=args.weights, mlp_model_path=args.mlp_model, output=args.output)
+    build_submission(weights_path=args.weights, mlp_model_path=args.mlp_model, output=args.output, clean_evaluator=args.clean)
 
 
 if __name__ == "__main__":

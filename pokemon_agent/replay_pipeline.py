@@ -21,8 +21,13 @@ from .engine import EpisodeResult
 from .features import combine_feature_dicts, extract_action_features, score_features
 from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
 from .policy import RandomPolicy, load_weights
+from .reply_risk import (
+    extract_reply_risk_features,
+    reply_risk_labels_from_state_and_actions,
+    train_reply_risk_model,
+)
 from .reward import transition_reward
-from .sequence import SequenceSearchConfig, default_sequence_weights
+from .sequence import SequenceSearchConfig, default_clean_sequence_weights, default_sequence_weights
 from .state import build_agent_state
 
 ensure_cg_path()
@@ -366,6 +371,135 @@ def _candidate_record(sequence: Any) -> dict[str, Any]:
     }
 
 
+def _candidate_coverage_record(sequence: Any) -> dict[str, Any]:
+    labels = [label for step in sequence.steps for label in step.labels]
+    return {
+        "selected": list(sequence.first_selection),
+        "labels": labels,
+        "tags": list(getattr(sequence, "generation_tags", ())),
+        "used_search": bool(getattr(sequence, "used_search", False)),
+    }
+
+
+def build_candidate_coverage_dataset(
+    inputs: list[str],
+    *,
+    output: str = "artifacts/replay_labels/candidate_coverage.jsonl",
+    config_path: str | None = None,
+    weights_path: str | None = None,
+    min_rating: float | None = None,
+    max_examples: int | None = None,
+    beam_width: int = 16,
+    max_depth: int = 10,
+    max_nodes: int = 256,
+    time_budget_ms: int = 1000,
+    num_hidden_samples: int = 1,
+) -> dict[str, Any]:
+    config = load_config(config_path)
+    deck = read_deck(config=config)
+    weights = load_weights(weights_path) if weights_path else None
+    engine = DecisionEngine(
+        deck=deck,
+        config=config,
+        weights=weights,
+        search_config=SequenceSearchConfig(
+            beam_width=beam_width,
+            max_depth=max_depth,
+            max_nodes=max_nodes,
+            time_budget_ms=time_budget_ms,
+            num_hidden_samples=max(1, int(num_hidden_samples)),
+        ),
+    )
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    stats = {
+        "inputs": inputs,
+        "output": str(output_path),
+        "examples": 0,
+        "expert_action_in_candidates": 0,
+        "expert_action_missing": 0,
+        "parse_errors": 0,
+        "candidate_errors": 0,
+        "expert_action_in_candidates_rate": 0.0,
+        "candidate_coverage_by_action_type": {},
+    }
+    action_type_totals: dict[str, int] = {}
+    action_type_hits: dict[str, int] = {}
+    with output_path.open("w", encoding="utf-8") as fh:
+        for decision in iter_replay_decisions(inputs, min_rating=min_rating):
+            if max_examples is not None and stats["examples"] >= max_examples:
+                break
+            try:
+                obs = to_observation_class(decision.observation)
+            except Exception:
+                stats["parse_errors"] += 1
+                continue
+            if obs.select is None:
+                continue
+            selected, invalid = sanitize_selection(obs, decision.selected)
+            if invalid:
+                stats["expert_action_missing"] += 1
+                continue
+            try:
+                observed = engine.observe(obs)
+                planning = engine.plan(observed)
+            except Exception:
+                stats["candidate_errors"] += 1
+                continue
+            candidates = list(planning.candidates)
+            if not candidates:
+                stats["candidate_errors"] += 1
+                continue
+            selected_key = tuple(selected)
+            matched = any(tuple(sequence.first_selection) == selected_key for sequence in candidates)
+            selected_actions = [action for action in observed.actions if action.index in selected]
+            action_type = "+".join(action.label for action in selected_actions) or "unknown"
+            action_type_totals[action_type] = action_type_totals.get(action_type, 0) + 1
+            if matched:
+                action_type_hits[action_type] = action_type_hits.get(action_type, 0) + 1
+            coverage = planning.coverage
+            record = {
+                "source": decision.source,
+                "episode_id": decision.episode_id,
+                "step_index": decision.step_index,
+                "player_index": decision.player_index,
+                "rating": decision.rating,
+                "selected": selected,
+                "matched": matched,
+                "action_type": action_type,
+                "coverage": {
+                    "num_legal_first_actions": coverage.num_legal_first_actions if coverage else 0,
+                    "num_first_actions_represented": coverage.num_first_actions_represented if coverage else 0,
+                    "missing_first_actions": [list(item) for item in coverage.missing_first_actions] if coverage else [],
+                    "num_candidates": coverage.num_candidates if coverage else len(candidates),
+                    "node_budget_hit": coverage.node_budget_hit if coverage else False,
+                    "time_budget_hit": coverage.time_budget_hit if coverage else False,
+                    "candidate_tags": list(coverage.candidate_tags) if coverage else [],
+                },
+                "hidden_samples_used": list(planning.hidden_samples_used),
+                "candidates": [_candidate_coverage_record(sequence) for sequence in candidates],
+            }
+            fh.write(json.dumps(record, sort_keys=True) + "\n")
+            stats["examples"] += 1
+            stats["expert_action_in_candidates" if matched else "expert_action_missing"] += 1
+    if stats["examples"]:
+        stats["expert_action_in_candidates_rate"] = stats["expert_action_in_candidates"] / stats["examples"]
+    stats["candidate_coverage_by_action_type"] = {
+        key: {
+            "examples": total,
+            "matched": action_type_hits.get(key, 0),
+            "rate": action_type_hits.get(key, 0) / total if total else 0.0,
+        }
+        for key, total in sorted(action_type_totals.items())
+    }
+    print(json.dumps(stats, indent=2))
+    return stats
+
+
+def build_ranking_dataset(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    return build_label_dataset(*args, **kwargs)
+
+
 def build_label_dataset(
     inputs: list[str],
     *,
@@ -379,6 +513,7 @@ def build_label_dataset(
     max_depth: int = 10,
     max_nodes: int = 256,
     time_budget_ms: int = 1000,
+    clean_evaluator: bool = False,
 ) -> dict[str, Any]:
     config = load_config(config_path)
     deck = read_deck(config=config)
@@ -388,6 +523,7 @@ def build_label_dataset(
         config=config,
         weights=weights,
         search_config=SequenceSearchConfig(beam_width=beam_width, max_depth=max_depth, max_nodes=max_nodes, time_budget_ms=time_budget_ms),
+        clean_evaluator=clean_evaluator,
     )
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -399,6 +535,7 @@ def build_label_dataset(
         "unmatched": 0,
         "parse_errors": 0,
         "candidate_errors": 0,
+        "clean_evaluator": clean_evaluator,
     }
     with output_path.open("w", encoding="utf-8") as fh:
         for decision in iter_replay_decisions(inputs, min_rating=min_rating):
@@ -446,6 +583,60 @@ def build_label_dataset(
             fh.write(json.dumps(record, sort_keys=True) + "\n")
             stats["examples"] += 1
             stats["matched" if label_index >= 0 else "unmatched"] += 1
+    print(json.dumps(stats, indent=2))
+    return stats
+
+
+def build_reply_risk_dataset(
+    inputs: list[str],
+    *,
+    output: str = "artifacts/reply_risk/replay_reply_risk_labels.jsonl",
+    config_path: str | None = None,
+    min_rating: float | None = None,
+    max_examples: int | None = None,
+) -> dict[str, Any]:
+    config = load_config(config_path)
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    stats = {
+        "inputs": inputs,
+        "output": str(output_path),
+        "examples": 0,
+        "parse_errors": 0,
+        "invalid_selections": 0,
+        "empty_actions": 0,
+    }
+    with output_path.open("w", encoding="utf-8") as fh:
+        for decision in iter_replay_decisions(inputs, min_rating=min_rating):
+            if max_examples is not None and stats["examples"] >= max_examples:
+                break
+            try:
+                obs = to_observation_class(decision.observation)
+                actions = legal_actions(obs)
+                state = build_agent_state(obs, actions=actions)
+            except Exception:
+                stats["parse_errors"] += 1
+                continue
+            if obs.select is None or not actions:
+                stats["empty_actions"] += 1
+                continue
+            selected, invalid = sanitize_selection(obs, decision.selected)
+            if invalid:
+                stats["invalid_selections"] += 1
+                continue
+            selected_actions = [action for action in actions if action.index in selected]
+            record = {
+                "source": decision.source,
+                "episode_id": decision.episode_id,
+                "step_index": decision.step_index,
+                "player_index": decision.player_index,
+                "rating": decision.rating,
+                "selected": selected,
+                "features": _compact_features(extract_reply_risk_features(state, config)),
+                "labels": reply_risk_labels_from_state_and_actions(state, selected_actions, config),
+            }
+            fh.write(json.dumps(record, sort_keys=True) + "\n")
+            stats["examples"] += 1
     print(json.dumps(stats, indent=2))
     return stats
 
@@ -556,8 +747,9 @@ def pretrain_sequence_scorer(
     lr: float = 0.02,
     temperature: float = 350.0,
     weights_path: str | None = None,
+    clean_evaluator: bool = False,
 ) -> dict[str, Any]:
-    weights = default_sequence_weights()
+    weights = default_clean_sequence_weights() if clean_evaluator else default_sequence_weights()
     if weights_path:
         weights.update(load_weights(weights_path))
     out_path = Path(out_dir)
@@ -596,6 +788,7 @@ def pretrain_sequence_scorer(
             "top1_accuracy": top1 / examples if examples else 0.0,
             "average_loss": total_loss / examples if examples else 0.0,
             "out_dir": str(out_path),
+            "clean_evaluator": clean_evaluator,
         }
         _save_weights(out_path / f"checkpoint_epoch_{epoch}.json", weights, summary)
         _save_weights(latest_path, weights, summary)
@@ -610,7 +803,16 @@ def pretrain_sequence_scorer(
 
 
 class TrainableSequencePolicy:
-    def __init__(self, *, deck: list[int], config: dict[str, Any], weights: dict[str, float], epsilon: float, seed: int):
+    def __init__(
+        self,
+        *,
+        deck: list[int],
+        config: dict[str, Any],
+        weights: dict[str, float],
+        epsilon: float,
+        seed: int,
+        clean_evaluator: bool = False,
+    ):
         self.random_policy = RandomPolicy(seed=seed)
         self.rng = random.Random(seed)
         self.epsilon = epsilon
@@ -619,6 +821,7 @@ class TrainableSequencePolicy:
             config=config,
             weights=weights,
             search_config=SequenceSearchConfig(beam_width=8, max_depth=8, max_nodes=128, time_budget_ms=500),
+            clean_evaluator=clean_evaluator,
             seed=seed,
         )
         self.last_features: dict[str, float] | None = None
@@ -649,6 +852,7 @@ class TrainableMLPSequencePolicy:
         seed: int,
         linear_score_weight: float,
         mlp_score_weight: float,
+        clean_evaluator: bool = False,
     ):
         self.random_policy = RandomPolicy(seed=seed)
         self.rng = random.Random(seed)
@@ -661,6 +865,7 @@ class TrainableMLPSequencePolicy:
             linear_score_weight=linear_score_weight,
             mlp_score_weight=mlp_score_weight,
             search_config=SequenceSearchConfig(beam_width=8, max_depth=8, max_nodes=128, time_budget_ms=500),
+            clean_evaluator=clean_evaluator,
             seed=seed,
         )
         self.last_features: dict[str, float] | None = None
@@ -822,10 +1027,11 @@ def rl_self_play(
     epsilon_start: float = 0.15,
     epsilon_end: float = 0.03,
     checkpoint_every: int = 100,
+    clean_evaluator: bool = False,
 ) -> dict[str, Any]:
     config = load_config(config_path)
     deck = read_deck(config=config)
-    weights = default_sequence_weights()
+    weights = default_clean_sequence_weights() if clean_evaluator else default_sequence_weights()
     if weights_path:
         weights.update(load_weights(weights_path))
     out_path = Path(out_dir)
@@ -840,8 +1046,22 @@ def rl_self_play(
             frac = game / max(1, games)
             epsilon = epsilon_start + (epsilon_end - epsilon_start) * frac
             train_player = game % 2
-            policy0 = TrainableSequencePolicy(deck=deck, config=config, weights=weights, epsilon=epsilon, seed=game * 101 + 1)
-            policy1 = TrainableSequencePolicy(deck=deck, config=config, weights=weights, epsilon=epsilon, seed=game * 101 + 2)
+            policy0 = TrainableSequencePolicy(
+                deck=deck,
+                config=config,
+                weights=weights,
+                epsilon=epsilon,
+                seed=game * 101 + 1,
+                clean_evaluator=clean_evaluator,
+            )
+            policy1 = TrainableSequencePolicy(
+                deck=deck,
+                config=config,
+                weights=weights,
+                epsilon=epsilon,
+                seed=game * 101 + 2,
+                clean_evaluator=clean_evaluator,
+            )
             result, transitions = _sequence_episode(policy0, policy1, deck, deck, config=config)
             outcome = result.outcome_for(train_player)
             _update_rl_weights(weights, transitions, train_player=train_player, outcome=outcome, lr=lr, gamma=gamma)
@@ -876,6 +1096,7 @@ def rl_self_play(
                     "average_steps": total_steps / game,
                     "recent_score": recent_score,
                     "metrics": str(metrics_path),
+                    "clean_evaluator": clean_evaluator,
                 }
                 _save_weights(out_path / f"checkpoint_{game}.json", weights, summary)
                 _save_weights(out_path / "latest.json", weights, summary)
@@ -894,6 +1115,7 @@ def rl_self_play(
         "metrics": str(metrics_path),
         "best_checkpoint": str(out_path / "best.json"),
         "latest_checkpoint": str(out_path / "latest.json"),
+        "clean_evaluator": clean_evaluator,
     }
     print(json.dumps(summary, indent=2))
     return summary
@@ -916,10 +1138,11 @@ def rl_self_play_mlp(
     grad_clip: float = 5.0,
     linear_score_weight: float = 1.0,
     mlp_score_weight: float = 5.0,
+    clean_evaluator: bool = False,
 ) -> dict[str, Any]:
     config = load_config(config_path)
     deck = read_deck(config=config)
-    weights = default_sequence_weights()
+    weights = default_clean_sequence_weights() if clean_evaluator else default_sequence_weights()
     if weights_path:
         weights.update(load_weights(weights_path))
     model = MLPSequenceRanker.from_file(model_path)
@@ -945,6 +1168,7 @@ def rl_self_play_mlp(
                 seed=game * 101 + 1,
                 linear_score_weight=linear_score_weight,
                 mlp_score_weight=mlp_score_weight,
+                clean_evaluator=clean_evaluator,
             )
             policy1 = TrainableMLPSequencePolicy(
                 deck=deck,
@@ -955,6 +1179,7 @@ def rl_self_play_mlp(
                 seed=game * 101 + 2,
                 linear_score_weight=linear_score_weight,
                 mlp_score_weight=mlp_score_weight,
+                clean_evaluator=clean_evaluator,
             )
             result, transitions = _sequence_episode(policy0, policy1, deck, deck, config=config)
             outcome = result.outcome_for(train_player)
@@ -1008,6 +1233,7 @@ def rl_self_play_mlp(
                     "source_model": model_path,
                     "linear_score_weight": linear_score_weight,
                     "mlp_score_weight": mlp_score_weight,
+                    "clean_evaluator": clean_evaluator,
                 }
                 model.save(out_path / f"checkpoint_{game}.json", summary=summary)
                 model.save(out_path / "latest.json", summary=summary)
@@ -1027,6 +1253,7 @@ def rl_self_play_mlp(
         "metrics": str(metrics_path),
         "best_checkpoint": str(out_path / "best.json"),
         "latest_checkpoint": str(out_path / "latest.json"),
+        "clean_evaluator": clean_evaluator,
     }
     print(json.dumps(summary, indent=2))
     return summary
@@ -1178,7 +1405,20 @@ def main() -> None:
     fetch.add_argument("--episodes-per-submission", type=int, default=20)
     fetch.add_argument("--dry-run", action="store_true")
 
-    labels = sub.add_parser("labels", help="Convert replay JSON into sequence imitation labels.")
+    coverage_labels = sub.add_parser("coverage-labels", help="Build planner-only candidate coverage labels from replay decisions.")
+    coverage_labels.add_argument("inputs", nargs="+")
+    coverage_labels.add_argument("--output", default="artifacts/replay_labels/candidate_coverage.jsonl")
+    coverage_labels.add_argument("--config", default=None)
+    coverage_labels.add_argument("--weights", default=None)
+    coverage_labels.add_argument("--min-rating", type=float, default=None)
+    coverage_labels.add_argument("--max-examples", type=int, default=None)
+    coverage_labels.add_argument("--beam-width", type=int, default=16)
+    coverage_labels.add_argument("--max-depth", type=int, default=10)
+    coverage_labels.add_argument("--max-nodes", type=int, default=256)
+    coverage_labels.add_argument("--time-budget-ms", type=int, default=1000)
+    coverage_labels.add_argument("--num-hidden-samples", type=int, default=1)
+
+    labels = sub.add_parser("labels", help="Convert replay JSON into sequence ranking labels.")
     labels.add_argument("inputs", nargs="+")
     labels.add_argument("--output", default="artifacts/replay_labels/sequence_labels.jsonl")
     labels.add_argument("--config", default=None)
@@ -1190,6 +1430,40 @@ def main() -> None:
     labels.add_argument("--max-depth", type=int, default=10)
     labels.add_argument("--max-nodes", type=int, default=256)
     labels.add_argument("--time-budget-ms", type=int, default=1000)
+    labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
+
+    ranking_labels = sub.add_parser("ranking-labels", help="Alias for labels; builds scored ranking labels from replay decisions.")
+    ranking_labels.add_argument("inputs", nargs="+")
+    ranking_labels.add_argument("--output", default="artifacts/replay_labels/ranking_labels.jsonl")
+    ranking_labels.add_argument("--config", default=None)
+    ranking_labels.add_argument("--weights", default=None)
+    ranking_labels.add_argument("--min-rating", type=float, default=None)
+    ranking_labels.add_argument("--max-examples", type=int, default=None)
+    ranking_labels.add_argument("--max-candidates", type=int, default=24)
+    ranking_labels.add_argument("--beam-width", type=int, default=16)
+    ranking_labels.add_argument("--max-depth", type=int, default=10)
+    ranking_labels.add_argument("--max-nodes", type=int, default=256)
+    ranking_labels.add_argument("--time-budget-ms", type=int, default=1000)
+    ranking_labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
+
+    reply_labels = sub.add_parser("reply-labels", help="Build hidden-capability/reply-risk labels from replay decisions.")
+    reply_labels.add_argument("inputs", nargs="+")
+    reply_labels.add_argument("--output", default="artifacts/reply_risk/replay_reply_risk_labels.jsonl")
+    reply_labels.add_argument("--config", default=None)
+    reply_labels.add_argument("--min-rating", type=float, default=None)
+    reply_labels.add_argument("--max-examples", type=int, default=None)
+
+    train_reply = sub.add_parser("train-reply-risk", help="Train the hidden-capability/reply-risk model.")
+    train_reply.add_argument("--labels", required=True)
+    train_reply.add_argument("--out-dir", default="artifacts/checkpoints/reply_risk")
+    train_reply.add_argument("--epochs", type=int, default=5)
+    train_reply.add_argument("--lr", type=float, default=0.01)
+    train_reply.add_argument("--l2", type=float, default=1e-6)
+    train_reply.add_argument("--max-features", type=int, default=512)
+    train_reply.add_argument("--min-feature-count", type=int, default=2)
+    train_reply.add_argument("--max-examples", type=int, default=None)
+    train_reply.add_argument("--input-clip", type=float, default=8.0)
+    train_reply.add_argument("--grad-clip", type=float, default=5.0)
 
     pretrain = sub.add_parser("pretrain", help="Supervised pretrain sequence weights from labels.")
     pretrain.add_argument("--labels", required=True)
@@ -1198,6 +1472,7 @@ def main() -> None:
     pretrain.add_argument("--lr", type=float, default=0.02)
     pretrain.add_argument("--temperature", type=float, default=350.0)
     pretrain.add_argument("--weights", default=None)
+    pretrain.add_argument("--clean", action="store_true", help="Train clean sequence linear weights.")
 
     compact_labels = sub.add_parser("compact-labels", help="Write a compact MLP-friendly label JSONL.")
     compact_labels.add_argument("--labels", required=True)
@@ -1222,6 +1497,7 @@ def main() -> None:
     pretrain_mlp.add_argument("--input-clip", type=float, default=8.0)
     pretrain_mlp.add_argument("--grad-clip", type=float, default=5.0)
     pretrain_mlp.add_argument("--normalization", choices=("sparse", "standard"), default="sparse")
+    pretrain_mlp.add_argument("--feature-schema-version", choices=("legacy", "sequence_v3_full", "sequence_v3_clean"), default="legacy")
 
     rl = sub.add_parser("self-play", help="Fine-tune sequence weights with self-play returns.")
     rl.add_argument("--games", type=int, default=500)
@@ -1233,6 +1509,7 @@ def main() -> None:
     rl.add_argument("--epsilon-start", type=float, default=0.15)
     rl.add_argument("--epsilon-end", type=float, default=0.03)
     rl.add_argument("--checkpoint-every", type=int, default=100)
+    rl.add_argument("--clean", action="store_true", help="Fine-tune clean sequence linear weights.")
 
     rl_mlp = sub.add_parser("self-play-mlp", help="Fine-tune an MLP sequence ranker with self-play returns.")
     rl_mlp.add_argument("--games", type=int, default=500)
@@ -1250,6 +1527,7 @@ def main() -> None:
     rl_mlp.add_argument("--grad-clip", type=float, default=5.0)
     rl_mlp.add_argument("--linear-score-weight", type=float, default=1.0)
     rl_mlp.add_argument("--mlp-score-weight", type=float, default=5.0)
+    rl_mlp.add_argument("--clean", action="store_true", help="Fine-tune the MLP inside the clean sequence evaluator.")
 
     rl_vs_sequence = sub.add_parser("train-mlp-vs-sequence", help="Fine-tune an MLP ranker against a frozen sequence baseline.")
     rl_vs_sequence.add_argument("--games", type=int, default=500)
@@ -1278,7 +1556,21 @@ def main() -> None:
             episodes_per_submission=args.episodes_per_submission,
             dry_run=args.dry_run,
         )
-    elif args.cmd == "labels":
+    elif args.cmd == "coverage-labels":
+        build_candidate_coverage_dataset(
+            args.inputs,
+            output=args.output,
+            config_path=args.config,
+            weights_path=args.weights,
+            min_rating=args.min_rating,
+            max_examples=args.max_examples,
+            beam_width=args.beam_width,
+            max_depth=args.max_depth,
+            max_nodes=args.max_nodes,
+            time_budget_ms=args.time_budget_ms,
+            num_hidden_samples=args.num_hidden_samples,
+        )
+    elif args.cmd in {"labels", "ranking-labels"}:
         build_label_dataset(
             args.inputs,
             output=args.output,
@@ -1291,6 +1583,28 @@ def main() -> None:
             max_depth=args.max_depth,
             max_nodes=args.max_nodes,
             time_budget_ms=args.time_budget_ms,
+            clean_evaluator=args.clean,
+        )
+    elif args.cmd == "reply-labels":
+        build_reply_risk_dataset(
+            args.inputs,
+            output=args.output,
+            config_path=args.config,
+            min_rating=args.min_rating,
+            max_examples=args.max_examples,
+        )
+    elif args.cmd == "train-reply-risk":
+        train_reply_risk_model(
+            args.labels,
+            out_dir=args.out_dir,
+            epochs=args.epochs,
+            lr=args.lr,
+            l2=args.l2,
+            max_features=args.max_features,
+            min_feature_count=args.min_feature_count,
+            max_examples=args.max_examples,
+            input_clip=args.input_clip,
+            grad_clip=args.grad_clip,
         )
     elif args.cmd == "pretrain":
         pretrain_sequence_scorer(
@@ -1300,6 +1614,7 @@ def main() -> None:
             lr=args.lr,
             temperature=args.temperature,
             weights_path=args.weights,
+            clean_evaluator=args.clean,
         )
     elif args.cmd == "compact-labels":
         compact_label_dataset(
@@ -1326,6 +1641,7 @@ def main() -> None:
             input_clip=args.input_clip,
             grad_clip=args.grad_clip,
             normalization=args.normalization,
+            feature_schema_version=args.feature_schema_version,
         )
         print(json.dumps(summary, indent=2))
     elif args.cmd == "self-play":
@@ -1339,6 +1655,7 @@ def main() -> None:
             epsilon_start=args.epsilon_start,
             epsilon_end=args.epsilon_end,
             checkpoint_every=args.checkpoint_every,
+            clean_evaluator=args.clean,
         )
     elif args.cmd == "self-play-mlp":
         rl_self_play_mlp(
@@ -1357,6 +1674,7 @@ def main() -> None:
             grad_clip=args.grad_clip,
             linear_score_weight=args.linear_score_weight,
             mlp_score_weight=args.mlp_score_weight,
+            clean_evaluator=args.clean,
         )
     elif args.cmd == "train-mlp-vs-sequence":
         rl_against_sequence_mlp(

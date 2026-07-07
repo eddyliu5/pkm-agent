@@ -2,13 +2,24 @@
 
 Sequence-based Pokemon TCG battle agent for the Kaggle-style simulator expected at `data/pokemon-tcg-ai-battle`.
 
-The current runtime path is:
+The runtime is organized as an explicit agent loop:
 
 ```text
-Observation -> AgentState -> Belief/GamePlan/Resource/Threat evaluators
-  -> simulator-backed sequence beam search
-  -> sequence featurizer/scorer/value guardrail
-  -> first legal selection returned to the simulator
+observe:
+  raw observation + legal selections + logs
+  -> AgentState + OpponentMemory + BeliefState + ProbabilitySnapshot
+
+plan:
+  observed state and belief context
+  -> simulator-backed SearchTree + CandidateSequence options
+
+evaluate:
+  candidate sequences and resulting simulated states
+  -> linear sequence score + MLP ranker score + value guardrail features
+
+act:
+  scored candidates
+  -> selected candidate.first_selection returned to the simulator
 ```
 
 ## Current Defaults
@@ -46,6 +57,51 @@ Run the batch validation/package flow:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.overnight --baseline-games 100
+```
+
+## Clean Architecture Training
+
+The clean path keeps the simulator-backed sequence tree but removes direct probability/value/resource/threat/card-attention features from final candidate scoring. It trains:
+
+- clean linear sequence weights
+- clean MLP sequence ranker
+- reply-risk/hidden-capability model
+
+Run the full clean training pipeline:
+
+```bash
+./scripts/train_clean_models.sh
+```
+
+For a pilot run:
+
+```bash
+MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 REPLY_EPOCHS=2 ./scripts/train_clean_models.sh
+```
+
+Include clean self-play fine-tuning after replay pretraining:
+
+```bash
+RUN_SELF_PLAY=1 SELF_PLAY_GAMES=5000 ./scripts/train_clean_models.sh
+```
+
+Evaluate clean checkpoints:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent sequence-clean-mlp:artifacts/checkpoints/clean_mlp_ranker/best.json,artifacts/checkpoints/clean_sequence_linear/best.json \
+  --opponent heuristic \
+  --games 100
+```
+
+Package a clean submission:
+
+```bash
+./.venv/bin/python -m pokemon_agent.submission \
+  --clean \
+  --weights artifacts/checkpoints/clean_sequence_linear/best.json \
+  --mlp-model artifacts/checkpoints/clean_mlp_ranker/best.json \
+  --output artifacts/submission/clean_sequence_submission.tar.gz
 ```
 
 ## Replay Imitation And Self-Play
@@ -150,6 +206,73 @@ Build a combined sequence-weight plus MLP submission:
   --weights artifacts/checkpoints/replay_pretrain_top_sample/best.json \
   --mlp-model artifacts/checkpoints/mlp_ranker_high_elo/best.json \
   --output artifacts/submission/mlp_sequence_submission.tar.gz
+```
+
+## Probability Feature Training Refresh
+
+The runtime now emits hidden-information probability features such as prize risk, energy access, and line accessibility. Existing MLP checkpoints do not use new feature names until labels are regenerated and the ranker is retrained.
+
+Regenerate replay labels with probability features:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline labels \
+  artifacts/replays/kaggle \
+  --output artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
+  --min-rating 1400 \
+  --max-candidates 24 \
+  --beam-width 32 \
+  --max-depth 12 \
+  --max-nodes 512 \
+  --time-budget-ms 1000
+```
+
+Compact labels for MLP training:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline compact-labels \
+  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
+  --output artifacts/replay_labels/high_elo_sequence_labels_probability.top16.compact.jsonl \
+  --max-candidates 16
+```
+
+Train refreshed sequence weights and MLP checkpoints:
+
+```bash
+./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain \
+  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.jsonl \
+  --out-dir artifacts/checkpoints/replay_pretrain_probability \
+  --epochs 5
+
+./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain-mlp \
+  --labels artifacts/replay_labels/high_elo_sequence_labels_probability.top16.compact.jsonl \
+  --out-dir artifacts/checkpoints/mlp_ranker_probability \
+  --epochs 5 \
+  --hidden-dim 128 \
+  --max-features 320
+```
+
+Evaluate before packaging:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_probability/best.json,artifacts/checkpoints/replay_pretrain_probability/best.json \
+  --opponent heuristic \
+  --games 100
+
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_probability/best.json,artifacts/checkpoints/replay_pretrain_probability/best.json \
+  --opponent random \
+  --games 100 \
+  --opponent-decks deck_db
+```
+
+Build a refreshed submission:
+
+```bash
+./.venv/bin/python -m pokemon_agent.submission \
+  --weights artifacts/checkpoints/replay_pretrain_probability/best.json \
+  --mlp-model artifacts/checkpoints/mlp_ranker_probability/best.json \
+  --output artifacts/submission/mlp_probability_sequence_submission.tar.gz
 ```
 
 Fine-tune with sequence-feature self-play returns:

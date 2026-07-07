@@ -5,6 +5,7 @@ from collections import Counter
 from .actions import ActionView
 from .card_db import attack_data, card_data, is_energy
 from .config import card_ids
+from .opponent_memory import OpponentIntentSnapshot
 from .state import AgentState
 
 
@@ -64,7 +65,12 @@ def _count_in_play(state: AgentState, card_ids: set[int]) -> int:
     return sum(1 for pokemon in ([state.my_active] if state.my_active else []) + list(state.my_bench) if pokemon.id in card_ids)
 
 
-def extract_action_features(state: AgentState, action: ActionView, config: dict) -> dict[str, float]:
+def extract_action_features(
+    state: AgentState,
+    action: ActionView,
+    config: dict,
+    opponent_intent: OpponentIntentSnapshot | None = None,
+) -> dict[str, float]:
     ids = card_ids(config)
     main_attackers = _ids(config.get("main_attackers", []))
     main_line = _ids(config.get("main_line", []))
@@ -85,6 +91,10 @@ def extract_action_features(state: AgentState, action: ActionView, config: dict)
     ready_attackers = _ready_attackers(state, attacker_ids)
     main_ready = _ready_attackers(state, main_attackers) > 0
     main_in_play = _count_in_play(state, main_line | main_attackers)
+    setup_target_ids = set(opponent_intent.setup_target_ids) if opponent_intent is not None else set()
+    must_answer_target_ids = set(opponent_intent.must_answer_target_ids) if opponent_intent is not None else set()
+    evolution_window = opponent_intent.evolution_window_open if opponent_intent is not None else 0.0
+    selected_opponent_card = action.source_player_index == state.opponent_index or action.target_player_index == state.opponent_index
     features: dict[str, float] = {
         "bias": 1.0,
         f"context_{action.context.lower()}": 1.0,
@@ -100,6 +110,12 @@ def extract_action_features(state: AgentState, action: ActionView, config: dict)
         "main_attacker_ready": 1.0 if main_ready else 0.0,
         "main_line_in_play": min(3.0, float(main_in_play)) / 3.0,
     }
+    if opponent_intent is not None:
+        features["opponent_recent_pokemon_search"] = opponent_intent.recent_pokemon_search
+        features["opponent_recent_evolution_search"] = opponent_intent.recent_evolution_search
+        features["opponent_likely_setting_up_attacker"] = opponent_intent.likely_setting_up_attacker
+        features["opponent_evolution_window_open"] = opponent_intent.evolution_window_open
+        features["opponent_has_setup_targets"] = 1.0 if opponent_intent.has_setup_targets else 0.0
 
     if action.option_type in {"YES", "NO", "NUMBER"}:
         features["simple_selection"] = 1.0
@@ -129,6 +145,10 @@ def extract_action_features(state: AgentState, action: ActionView, config: dict)
             features["attack_prize_value"] = float(state.opp_active.prize_value)
             if state.opp_active.prize_value >= state.my_prizes_remaining:
                 features["attack_wins_game"] = 1.0
+            if state.opp_active.id in setup_target_ids:
+                features["attack_denies_evolution"] = max(0.35, evolution_window)
+            if state.opp_active.id in must_answer_target_ids:
+                features["attack_removes_must_answer"] = 1.0
         if _has_useful_non_terminal_action(state, action) and "attack_wins_game" not in features:
             features["attack_before_setup"] = 1.0
 
@@ -146,6 +166,8 @@ def extract_action_features(state: AgentState, action: ActionView, config: dict)
                 features["play_gust_without_ready_attacker"] = 1.0
             if state.my_prizes_remaining > 2 and state.opp_active and state.opp_active.prize_value < state.my_prizes_remaining:
                 features["play_gust_before_close"] = 1.0
+            if setup_target_ids and ready_attackers > 0:
+                features["play_gust_to_deny_evolution"] = max(0.35, evolution_window)
         if source_id in damage_boost_cards:
             features["play_damage_boost"] = 1.0
         if source_id in tool_cards:
@@ -202,6 +224,11 @@ def extract_action_features(state: AgentState, action: ActionView, config: dict)
             features["retreat_non_main_active"] = 1.0
 
     if action.option_type == "CARD":
+        if selected_opponent_card and source_id in setup_target_ids:
+            features["select_opponent_setup_target"] = 1.0
+            features["select_evolution_denial_target"] = max(0.35, evolution_window)
+        if selected_opponent_card and source_id in must_answer_target_ids:
+            features["select_must_answer_target"] = 1.0
         if source_id in main_line:
             features["select_main_line"] = 1.0
         if source_id in backup_attackers:
@@ -247,12 +274,15 @@ def default_weights() -> dict[str, float]:
         "attack_takes_ko": 700.0,
         "attack_prize_value": 240.0,
         "attack_wins_game": 10000.0,
+        "attack_denies_evolution": 520.0,
+        "attack_removes_must_answer": 320.0,
         "attack_before_setup": -220.0,
         "play_card": 10.0,
         "play_setup_basic": 150.0,
         "play_search": 260.0,
         "play_draw": 220.0,
         "play_gust": 180.0,
+        "play_gust_to_deny_evolution": 430.0,
         "play_damage_boost": 80.0,
         "play_tool": 80.0,
         "play_main_line": 160.0,
@@ -278,6 +308,9 @@ def default_weights() -> dict[str, float]:
         "select_search_card": 65.0,
         "select_draw_card": 90.0,
         "select_duplicate_in_hand": -40.0,
+        "select_opponent_setup_target": 340.0,
+        "select_evolution_denial_target": 520.0,
+        "select_must_answer_target": 260.0,
         "turn_early": 10.0,
         "turn_late": 5.0,
         "prize_diff": 20.0,

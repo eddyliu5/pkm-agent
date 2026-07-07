@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from .card_db import attack_data, card_data, card_name, prize_value
+from .card_db import attack_data, card_data, card_name, is_energy, prize_value
 from .cg_loader import PROJECT_ROOT
 
 
@@ -51,6 +51,47 @@ def expand_deck(deck: dict[str, Any]) -> list[int]:
     for card_id, count in sorted(deck_counts(deck).items()):
         ids.extend([card_id] * count)
     return ids
+
+
+def observed_win_rate(deck: dict[str, Any]) -> float | None:
+    source = deck.get("source") or {}
+    try:
+        return float(source["observed_win_rate"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def observed_wins(deck: dict[str, Any]) -> int:
+    source = deck.get("source") or {}
+    try:
+        return int(source.get("observed_wins", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def top_observed_winrate_decks(
+    db: dict[str, Any] | None = None,
+    *,
+    min_observed_wins: int = 25,
+    top_n: int | None = None,
+) -> list[dict[str, Any]]:
+    payload = db or load_deck_db()
+    decks = [
+        deck
+        for deck in iter_decks(payload)
+        if not validate_deck(deck)
+        and observed_win_rate(deck) is not None
+        and observed_wins(deck) >= min_observed_wins
+    ]
+    decks.sort(
+        key=lambda deck: (
+            observed_win_rate(deck) or 0.0,
+            observed_wins(deck),
+            str(deck.get("id", "")),
+        ),
+        reverse=True,
+    )
+    return decks[:top_n] if top_n is not None else decks
 
 
 @dataclass(frozen=True)
@@ -102,6 +143,78 @@ def _attacker_score(card_id: int, count: int) -> float:
     prize_bonus = 55.0 * prize_value(card_id)
     stage_penalty = 35.0 * _pokemon_stage_delay(card_id)
     return max_damage + prize_bonus + (12.0 * count) - (22.0 * min_cost) - stage_penalty
+
+
+def deck_heuristic_config(deck: dict[str, Any], db: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a role config from one exact deck list for deck-specific heuristics."""
+
+    counts = deck_counts(deck)
+    attacker_scores = [
+        (card_id, _attacker_score(card_id, count))
+        for card_id, count in counts.items()
+        if _attacker_score(card_id, count) > 0
+    ]
+    attacker_scores.sort(key=lambda item: item[1], reverse=True)
+    main_attackers = [card_id for card_id, _score in attacker_scores[:3]]
+    backup_attackers = [card_id for card_id, _score in attacker_scores[3:6]]
+    setup_basics: list[int] = []
+    key_evolutions: list[int] = []
+    pokemon_ids: list[int] = []
+    search_cards: list[int] = []
+    draw_cards: list[int] = []
+    gust_cards: list[int] = []
+    switch_cards: list[int] = []
+    damage_boost_cards: list[int] = []
+    tool_cards: list[int] = []
+    energy_cards = [card_id for card_id in counts if is_energy(card_id)]
+
+    for card_id in counts:
+        data = card_data(card_id)
+        if data is None:
+            continue
+        name = card_name(card_id).lower()
+        if data.cardType == 0:
+            pokemon_ids.append(card_id)
+            if getattr(data, "basic", False):
+                setup_basics.append(card_id)
+            if getattr(data, "stage1", False) or getattr(data, "stage2", False) or getattr(data, "megaEx", False):
+                key_evolutions.append(card_id)
+        elif data.cardType in (1, 2, 3, 4):
+            if any(token in name for token in ("ball", "poffin", "incense", "communication", "search", "gong", "pad")):
+                search_cards.append(card_id)
+            if any(token in name for token in ("professor", "research", "iono", "carmine", "lillie", "draw", "determination")):
+                draw_cards.append(card_id)
+            if any(token in name for token in ("boss", "catcher", "orders", "gust")):
+                gust_cards.append(card_id)
+            if any(token in name for token in ("switch", "rope", "cart", "jet energy")):
+                switch_cards.append(card_id)
+            if any(token in name for token in ("belt", "band", "power", "mountain", "laser")):
+                damage_boost_cards.append(card_id)
+            if data.cardType == 4 or any(token in name for token in ("cape", "tool", "belt", "band")):
+                tool_cards.append(card_id)
+
+    profile = deck_gameplan_profile(deck, db)
+    main_line = sorted(set(main_attackers + setup_basics + key_evolutions))
+    return {
+        "name": f"deck_heuristic_{deck['id']}",
+        "deck_id": str(deck["id"]),
+        "archetype": str(deck.get("archetype", "")),
+        "archetype_name": str(deck.get("archetype_name", deck.get("archetype", ""))),
+        "deck_plan_type": profile.plan_type,
+        "main_attackers": main_attackers,
+        "main_line": main_line or pokemon_ids,
+        "backup_attackers": backup_attackers,
+        "setup_basics": setup_basics,
+        "key_evolutions": key_evolutions,
+        "search_cards": search_cards,
+        "draw_cards": draw_cards,
+        "gust_cards": gust_cards,
+        "switch_cards": switch_cards,
+        "energy_cards": energy_cards,
+        "damage_boost_cards": damage_boost_cards,
+        "tool_cards": tool_cards,
+        "notes": "Auto-derived from deck_db for deck-specific heuristic baseline play.",
+    }
 
 
 def _estimate_plan_type(tags: Iterable[str], main_attackers: list[int], avg_first_attack: float, avg_game_end: float) -> str:

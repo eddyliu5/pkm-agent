@@ -155,6 +155,7 @@ class MLPSequenceRanker:
         input_clip: float = 8.0,
         activation: str = "relu",
         normalization: str = "standard",
+        feature_schema_version: str = "legacy",
     ):
         if activation != "relu":
             raise ValueError(f"Unsupported activation: {activation}")
@@ -176,6 +177,7 @@ class MLPSequenceRanker:
         self.input_clip = float(input_clip)
         self.activation = activation
         self.normalization = normalization
+        self.feature_schema_version = str(feature_schema_version or "legacy")
         input_dim = len(self.feature_names)
         if len(self.w1) != self.hidden_dim or any(len(row) != input_dim for row in self.w1):
             raise ValueError("w1 shape does not match hidden_dim x input_dim")
@@ -191,6 +193,7 @@ class MLPSequenceRanker:
         seed: int = 13,
         input_clip: float = 8.0,
         normalization: str = "sparse",
+        feature_schema_version: str = "legacy",
     ) -> "MLPSequenceRanker":
         rng = random.Random(seed)
         input_dim = len(feature_stats.names)
@@ -211,6 +214,7 @@ class MLPSequenceRanker:
             b2=0.0,
             input_clip=input_clip,
             normalization=normalization,
+            feature_schema_version=feature_schema_version,
         )
 
     @classmethod
@@ -229,6 +233,7 @@ class MLPSequenceRanker:
             input_clip=float(payload.get("input_clip", 8.0)),
             activation=str(payload.get("activation", "relu")),
             normalization=str(payload.get("normalization", "standard")),
+            feature_schema_version=str(payload.get("feature_schema_version", "legacy")),
         )
 
     @classmethod
@@ -240,6 +245,7 @@ class MLPSequenceRanker:
         return {
             "schema_version": SCHEMA_VERSION,
             "model_type": MODEL_TYPE,
+            "feature_schema_version": self.feature_schema_version,
             "feature_names": self.feature_names,
             "input_mean": self.input_mean,
             "input_scale": self.input_scale,
@@ -253,6 +259,13 @@ class MLPSequenceRanker:
             "b2": self.b2,
             "summary": summary or {},
         }
+
+    def validate_feature_schema(self, expected: str, *, allow_legacy: bool = True) -> None:
+        actual = self.feature_schema_version
+        if allow_legacy and actual == "legacy":
+            return
+        if actual != expected:
+            raise ValueError(f"MLP feature schema mismatch: expected {expected}, got {actual}")
 
     def save(self, path: str | Path, summary: dict[str, Any] | None = None) -> None:
         target = Path(path)
@@ -405,6 +418,7 @@ def pretrain_mlp_ranker(
     input_clip: float = 8.0,
     grad_clip: float = 5.0,
     normalization: str = "sparse",
+    feature_schema_version: str = "legacy",
 ) -> dict[str, Any]:
     stats = build_feature_stats(
         labels_path,
@@ -418,6 +432,7 @@ def pretrain_mlp_ranker(
         seed=seed,
         input_clip=input_clip,
         normalization=normalization,
+        feature_schema_version=feature_schema_version,
     )
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)

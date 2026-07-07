@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-from .cg_loader import ensure_cg_path
 from .config import load_config
 from .decision_engine import DecisionEngine
 from .mlp_ranker import MLPSequenceRanker
+from .runtime import RuntimeAdapter
 from .sequence import SequenceSearchConfig
-
-ensure_cg_path()
-
-from cg.api import to_observation_class  # noqa: E402
 
 
 def _agent_root() -> Path:
@@ -50,6 +45,15 @@ def _load_mlp_ranker(root: Path) -> MLPSequenceRanker | None:
     return MLPSequenceRanker.from_file(path)
 
 
+def _load_runtime_options(root: Path) -> dict:
+    path = root / "runtime_config.json"
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    return payload if isinstance(payload, dict) else {}
+
+
 ROOT = _agent_root()
 DECK = _read_deck(ROOT)
 try:
@@ -64,26 +68,30 @@ except FileNotFoundError:
             CONFIG = load_config()
 WEIGHTS = _load_weights(ROOT)
 MLP_RANKER = _load_mlp_ranker(ROOT)
+RUNTIME_OPTIONS = _load_runtime_options(ROOT)
+ADAPTER = RuntimeAdapter()
 ENGINE = DecisionEngine(
     deck=DECK,
     config=CONFIG,
     weights=WEIGHTS,
     mlp_ranker=MLP_RANKER,
-    search_config=SequenceSearchConfig(beam_width=8, max_depth=8, max_nodes=128, time_budget_ms=500),
+    clean_evaluator=bool(RUNTIME_OPTIONS.get("clean_evaluator", False)),
+    probability_features_enabled=bool(RUNTIME_OPTIONS.get("probability_features_enabled", True)),
+    mlp_enabled=bool(RUNTIME_OPTIONS.get("mlp_enabled", True)),
+    value_proxy_enabled=bool(RUNTIME_OPTIONS.get("value_proxy_enabled", True)),
+    fallback_guardrail_enabled=bool(RUNTIME_OPTIONS.get("fallback_guardrail_enabled", True)),
+    linear_score_weight=float(RUNTIME_OPTIONS.get("linear_score_weight", 1.0)),
+    mlp_score_weight=float(RUNTIME_OPTIONS.get("mlp_score_weight", 5.0)),
+    search_config=SequenceSearchConfig(
+        beam_width=8,
+        max_depth=8,
+        max_nodes=128,
+        time_budget_ms=500,
+        num_hidden_samples=max(1, int(RUNTIME_OPTIONS.get("num_hidden_samples", 1))),
+    ),
 )
 
 
 def agent(obs_dict: dict) -> list[int]:
-    obs = to_observation_class(obs_dict)
-    if obs.select is None:
-        return DECK
-    selected = ENGINE.choose(obs)
-    option_count = len(obs.select.option)
-    selected = [index for index in selected if isinstance(index, int) and 0 <= index < option_count]
-    if len(selected) < obs.select.minCount:
-        for index in range(option_count):
-            if index not in selected:
-                selected.append(index)
-            if len(selected) >= obs.select.minCount:
-                break
-    return selected[: obs.select.maxCount]
+    obs = ADAPTER.parse(obs_dict)
+    return ADAPTER.clamp(obs, ENGINE.choose(obs), DECK)

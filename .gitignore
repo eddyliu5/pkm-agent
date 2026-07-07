@@ -22,6 +22,15 @@ wheels/
 .env.*
 .python-version
 
+# Local runtime/package inputs and outputs
+/deck.csv
+/weights.json
+/mlp_model.json
+/runtime_config.json
+submission.tar.gz
+*.tar.gz
+*.zip
+
 # Generated training/evaluation/submission artifacts
 artifacts/
 

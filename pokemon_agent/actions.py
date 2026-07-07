@@ -65,8 +65,10 @@ class ActionView:
     select_type: str
     context: str
     option_type: str
+    source_player_index: int | None
     source_card_id: int | None
     source_name: str | None
+    target_player_index: int | None
     target_card_id: int | None
     target_name: str | None
     attack_id: int | None
@@ -148,6 +150,8 @@ def build_action_view(obs: Observation, option: Any, index: int) -> ActionView:
 
     source_name = _card_name(source)
     target_name = _card_name(target)
+    source_player_index = getattr(source, "playerIndex", player_index) if source is not None else player_index
+    target_player_index = getattr(target, "playerIndex", None) if target is not None else None
 
     if option.type == OptionType.NUMBER:
         label = f"choose number {option.number}"
@@ -184,8 +188,10 @@ def build_action_view(obs: Observation, option: Any, index: int) -> ActionView:
         select_type=select_type,
         context=context,
         option_type=option_type,
+        source_player_index=int(source_player_index) if source_player_index is not None else None,
         source_card_id=_card_id(source),
         source_name=source_name,
+        target_player_index=int(target_player_index) if target_player_index is not None else None,
         target_card_id=_card_id(target),
         target_name=target_name,
         attack_id=attack_id,

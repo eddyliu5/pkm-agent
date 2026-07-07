@@ -6,6 +6,8 @@ from typing import Any, Iterable
 
 from .card_db import attack_data, card_data
 from .deck_db import archetype_gameplan_profiles, expand_deck, get_deck, load_deck_db, rank_decks_by_observed_cards
+from .opponent_memory import EMPTY_OPPONENT_INTENT, OpponentIntentSnapshot
+from .probability import ProbabilityModel, ProbabilitySnapshot
 from .state import AgentState
 
 
@@ -15,6 +17,7 @@ class PrizeInfo:
     possibly_prized: Counter[int]
     available_key_cards: dict[int, int]
     unknown_prize_count: int
+    unknown_prize_pool: Counter[int]
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,7 @@ class OpponentBelief:
     expected_game_end_turn: float
     plan_type: str | None
     main_attacker_ids: tuple[int, ...]
+    intent: OpponentIntentSnapshot = EMPTY_OPPONENT_INTENT
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,7 @@ class HiddenSample:
 class BeliefState:
     prize_info: PrizeInfo
     opponent: OpponentBelief
+    probabilities: ProbabilitySnapshot = field(default_factory=ProbabilitySnapshot.empty)
     hidden_samples: tuple[HiddenSample, ...] = field(default_factory=tuple)
 
     @property
@@ -90,6 +95,10 @@ def _player_visible_cards(player: Any, *, include_hand: bool) -> list[int]:
         ids.extend(_pokemon_ids(pokemon))
     ids.extend(_cards(card for card in getattr(player, "prize", []) or [] if card is not None))
     return ids
+
+
+def _visible_prize_cards(player: Any) -> list[int]:
+    return _cards(card for card in getattr(player, "prize", []) or [] if card is not None)
 
 
 def _visible_deck_cards(obs: Any, player_index: int) -> list[int]:
@@ -155,6 +164,13 @@ def _pad_zone(zone: list[int], count: int, fallback_order: list[int]) -> list[in
     return zone[:count]
 
 
+def _rotated(values: list[int], offset: int) -> list[int]:
+    if not values:
+        return values
+    offset = offset % len(values)
+    return values[offset:] + values[:offset]
+
+
 def _key_ids(config: dict[str, Any]) -> set[int]:
     keys = (
         "main_attackers",
@@ -178,14 +194,20 @@ class PrizeTracker:
         player = obs.current.players[state.player_index]
         deck_counts = _count_deck(decklist)
         visible = Counter(_player_visible_cards(player, include_hand=True))
+        visible_prizes = Counter(_visible_prize_cards(player))
         visible_deck = Counter(_visible_deck_cards(obs, state.player_index))
         temporary_visible = Counter(_temporary_visible_cards(obs, state.player_index))
         hidden = _subtract_counts(deck_counts, visible, temporary_visible)
-        possible = Counter(_take_from_counts(Counter(hidden), state.my_prizes_remaining, decklist))
 
-        known = Counter()
+        known = Counter(visible_prizes)
+        inferred_from_deck_reveal = Counter()
         if visible_deck and sum(visible_deck.values()) >= state.my_deck_count:
-            known = _subtract_counts(deck_counts, visible, visible_deck, temporary_visible)
+            inferred_from_deck_reveal = _subtract_counts(deck_counts, visible, visible_deck, temporary_visible)
+            known.update(inferred_from_deck_reveal)
+
+        unknown_prize_count = max(0, state.my_prizes_remaining - sum(known.values()))
+        unknown_prize_pool = _subtract_counts(hidden, visible_deck, inferred_from_deck_reveal)
+        possible = Counter(_take_from_counts(Counter(unknown_prize_pool), unknown_prize_count, decklist))
 
         available: dict[int, int] = {}
         for card_id in _key_ids(self.config):
@@ -195,7 +217,8 @@ class PrizeTracker:
             known_prized=known,
             possibly_prized=possible,
             available_key_cards=available,
-            unknown_prize_count=max(0, state.my_prizes_remaining - sum(known.values())),
+            unknown_prize_count=unknown_prize_count,
+            unknown_prize_pool=unknown_prize_pool,
         )
 
 
@@ -229,8 +252,10 @@ class OpponentTracker:
         self.db = db or load_deck_db()
         self.profiles = archetype_gameplan_profiles(self.db)
 
-    def update(self, obs: Any, state: AgentState) -> OpponentBelief:
+    def update(self, obs: Any, state: AgentState, memory: Any | None = None) -> OpponentBelief:
         observed = _observed_opponent_cards(obs, state.opponent_index)
+        if memory is not None:
+            observed.extend(card_id for card_id, count in getattr(memory, "observed_card_ids", {}).items() for _ in range(int(count)))
         ranked = rank_decks_by_observed_cards(observed, self.db, top_n=3)
         total = sum(max(0.01, row["score"] + 0.01) for row in ranked) or 1.0
         probs = {row["archetype"]: max(0.01, row["score"] + 0.01) / total for row in ranked}
@@ -249,6 +274,8 @@ class OpponentTracker:
                 attack = attack_data(attack_id)
                 if attack is not None:
                     damage_ceiling = max(damage_ceiling, float(getattr(attack, "damage", 0) or 0))
+        main_attacker_ids = tuple(int(card_id) for card_id in top_profile.get("main_attacker_ids", [])) if top_profile else ()
+        intent = memory.snapshot(state, main_attacker_ids) if memory is not None else EMPTY_OPPONENT_INTENT
         return OpponentBelief(
             archetype_probs=probs,
             top_deck_id=top["deck_id"] if top else None,
@@ -262,25 +289,35 @@ class OpponentTracker:
             expected_first_attack_turn=float(top_profile.get("average_first_attack_turn", 3.0)) if top_profile else 3.0,
             expected_game_end_turn=float(top_profile.get("average_game_end_turn", 9.0)) if top_profile else 9.0,
             plan_type=str(top_profile.get("plan_type")) if top_profile else None,
-            main_attacker_ids=tuple(int(card_id) for card_id in top_profile.get("main_attacker_ids", [])) if top_profile else (),
+            main_attacker_ids=main_attacker_ids,
+            intent=intent,
         )
 
 
 class BeliefBuilder:
-    def __init__(self, config: dict[str, Any], decklist: list[int], db: dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any], decklist: list[int], db: dict[str, Any] | None = None, num_hidden_samples: int = 1):
         self.config = config
         self.decklist = [int(card_id) for card_id in decklist]
+        self.num_hidden_samples = max(1, int(num_hidden_samples))
         self.prizes = PrizeTracker(config)
         self.opponents = OpponentTracker(db)
+        self.probabilities = ProbabilityModel(config)
         self.db = db or load_deck_db()
 
-    def build(self, obs: Any, state: AgentState) -> BeliefState:
+    def build(self, obs: Any, state: AgentState, memory: Any | None = None) -> BeliefState:
         prize_info = self.prizes.update(obs, state, self.decklist)
-        opponent = self.opponents.update(obs, state)
-        sample = self._hidden_sample(obs, state, opponent)
-        return BeliefState(prize_info=prize_info, opponent=opponent, hidden_samples=(sample,))
+        opponent = self.opponents.update(obs, state, memory=memory)
+        probabilities = self.probabilities.evaluate(
+            state=state,
+            deck_counts=_count_deck(self.decklist),
+            known_prized=prize_info.known_prized,
+            unknown_prize_pool=prize_info.unknown_prize_pool,
+            unknown_prize_count=prize_info.unknown_prize_count,
+        )
+        samples = tuple(self._hidden_sample(obs, state, opponent, variant=index) for index in range(self.num_hidden_samples))
+        return BeliefState(prize_info=prize_info, opponent=opponent, probabilities=probabilities, hidden_samples=samples)
 
-    def _hidden_sample(self, obs: Any, state: AgentState, opponent: OpponentBelief) -> HiddenSample:
+    def _hidden_sample(self, obs: Any, state: AgentState, opponent: OpponentBelief, variant: int = 0) -> HiddenSample:
         your_player = obs.current.players[state.player_index]
         opp_player = obs.current.players[state.opponent_index]
         own_visible = Counter(_player_visible_cards(your_player, include_hand=True))
@@ -288,10 +325,11 @@ class BeliefBuilder:
         own_temporary_visible = Counter(_temporary_visible_cards(obs, state.player_index))
         own_hidden = _subtract_counts(_count_deck(self.decklist), own_visible, own_visible_deck, own_temporary_visible)
         own_counts = Counter(own_hidden)
-        your_deck = [] if own_visible_deck else _take_from_counts(own_counts, state.my_deck_count, self.decklist)
-        your_prize = _take_from_counts(own_counts, state.my_prizes_remaining, self.decklist)
-        your_deck = _pad_zone(your_deck, 0 if own_visible_deck else state.my_deck_count, self.decklist)
-        your_prize = _pad_zone(your_prize, state.my_prizes_remaining, self.decklist)
+        own_order = _rotated(self.decklist, variant)
+        your_deck = [] if own_visible_deck else _take_from_counts(own_counts, state.my_deck_count, own_order)
+        your_prize = _take_from_counts(own_counts, state.my_prizes_remaining, own_order)
+        your_deck = _pad_zone(your_deck, 0 if own_visible_deck else state.my_deck_count, own_order)
+        your_prize = _pad_zone(your_prize, state.my_prizes_remaining, own_order)
 
         opponent_decklist = self.decklist
         if opponent.top_deck_id:
@@ -301,7 +339,7 @@ class BeliefBuilder:
                 opponent_decklist = self.decklist
         opp_visible = Counter(_player_visible_cards(opp_player, include_hand=False))
         opp_counts = _subtract_counts(_count_deck(opponent_decklist), opp_visible)
-        opp_order = opponent_decklist
+        opp_order = _rotated(opponent_decklist, variant)
         opponent_hand = _take_from_counts(opp_counts, state.opp_hand_count, opp_order)
         opponent_prize = _take_from_counts(opp_counts, state.opp_prizes_remaining, opp_order)
         opponent_deck = _take_from_counts(opp_counts, state.opp_deck_count, opp_order)
