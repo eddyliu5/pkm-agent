@@ -5,6 +5,7 @@ from typing import Any
 
 from .actions import legal_actions, sanitize_selection
 from .cg_loader import ensure_cg_path
+from .decision_logging import serialize_policy_decision
 from .features import combine_feature_dicts, extract_action_features
 from .policy import Policy
 from .reward import transition_reward
@@ -34,6 +35,7 @@ class EpisodeResult:
     invalid_actions: int
     final_prizes: tuple[int, int]
     transitions: list[Transition] = field(default_factory=list)
+    decisions: list[dict[str, Any]] = field(default_factory=list)
 
     def outcome_for(self, player: int) -> float:
         if self.winner == player:
@@ -59,12 +61,16 @@ def run_episode(
     config: dict,
     max_steps: int = 2000,
     collect_transitions: bool = False,
+    collect_decisions: bool = False,
+    decision_metadata: dict[str, Any] | None = None,
+    player_roles: dict[int, dict[str, Any]] | None = None,
 ) -> EpisodeResult:
     obs_dict, start_data = battle_start(deck0, deck1)
     if obs_dict is None:
         raise RuntimeError(f"battle_start failed: player={start_data.errorPlayer} type={start_data.errorType}")
 
     transitions: list[Transition] = []
+    decisions: list[dict[str, Any]] = []
     invalid_actions = 0
     steps = 0
     obs = to_observation_class(obs_dict)
@@ -77,6 +83,23 @@ def run_episode(
             selected_raw = policy.choose(obs)
             selected, invalid = sanitize_selection(obs, selected_raw)
             invalid_actions += int(invalid)
+            if collect_decisions:
+                metadata = {
+                    **(decision_metadata or {}),
+                    **((player_roles or {}).get(int(player), {})),
+                    "step": steps,
+                    "episode_player": int(player),
+                }
+                decision_record = serialize_policy_decision(
+                    policy,
+                    obs,
+                    selected=selected,
+                    selected_raw=selected_raw,
+                    invalid=invalid,
+                    metadata=metadata,
+                )
+                if decision_record is not None:
+                    decisions.append(decision_record)
             selected_views = [action for action in action_views if action.index in selected]
             feature_dicts = [extract_action_features(prev_state, action, config) for action in selected_views]
             combined_features = combine_feature_dicts(feature_dicts)
@@ -115,9 +138,9 @@ def run_episode(
         invalid_actions=invalid_actions,
         final_prizes=final_prizes,
         transitions=transitions,
+        decisions=decisions,
     )
 
 
 def policy_name(policy: Any) -> str:
     return policy.__class__.__name__
-

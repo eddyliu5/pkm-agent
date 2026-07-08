@@ -122,6 +122,10 @@ class DecisionEngine:
         self.guardrail = FallbackGuardrail()
         self.last_trace: DecisionTrace | None = None
         self.last_chosen_sequence: CandidateSequence | None = None
+        self.last_observed_context: ObservedContext | None = None
+        self.last_planning_result: PlanningResult | None = None
+        self.last_evaluation_result: EvaluationResult | None = None
+        self.last_decision: AgentDecision | None = None
         self.last_planning_coverage: PlanningCoverage | None = None
         self.pending_warm_start: WarmStartContinuation | None = None
         self.last_warm_start_status: str | None = None
@@ -140,6 +144,7 @@ class DecisionEngine:
             decision = self._choose_sequence(obs, mode=mode)
         self.last_chosen_sequence = decision.chosen_sequence
         self.last_trace = decision.trace
+        self.last_decision = decision
         return decision.selected
 
     def score_sequences(self, obs: Any) -> list[CandidateSequence]:
@@ -242,14 +247,20 @@ class DecisionEngine:
 
     def _choose_sequence(self, obs: Any, mode: str) -> AgentDecision:
         observed = self.observe(obs)
+        self.last_observed_context = observed
         planning = self.plan(observed)
+        self.last_planning_result = planning
         evaluated = self.evaluate(observed, planning)
-        return self.act(observed, planning, evaluated, mode=mode)
+        self.last_evaluation_result = evaluated
+        decision = self.act(observed, planning, evaluated, mode=mode)
+        self.last_decision = decision
+        return decision
 
     def _fallback_choose(self, obs: Any) -> list[int]:
         decision = self._fallback_decision(obs)
         self.last_chosen_sequence = decision.chosen_sequence
         self.last_trace = decision.trace
+        self.last_decision = decision
         return decision.selected
 
     def _fallback_decision(self, obs: Any) -> AgentDecision:

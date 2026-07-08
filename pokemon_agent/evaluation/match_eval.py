@@ -77,8 +77,8 @@ def _opponent_deck_pool(source: str | None) -> list[tuple[str, str, list[int]]]:
     return [(deck_id, archetype, deck) for deck_id, archetype, deck, _config in _deck_pool(source)]
 
 
-def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, str, list[int], dict]], list[tuple[str, str, list[int], dict]], dict[str, bool] | None]) -> tuple[dict[str, object], list[dict[str, object]]]:
-    game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options = args
+def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, str, list[int], dict]], list[tuple[str, str, list[int], dict]], dict[str, bool] | None, bool]) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]]]:
+    game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options, collect_decisions = args
     agent_side = game % 2
     current_agent_deck_id = "default"
     current_agent_archetype = str(config.get("name", "default"))
@@ -102,11 +102,38 @@ def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, s
         opponent_config.update(opponent_role_config)
     agent = make_policy(agent_spec, config=agent_config, seed=game * 17 + 1, deck=agent_deck, sequence_options=sequence_options)
     opponent = make_policy(opponent_spec, config=opponent_config, seed=game * 17 + 2, deck=opponent_deck, sequence_options=sequence_options)
+    base_decision_metadata = {
+        "game": int(game),
+        "agent_spec": agent_spec,
+        "opponent_spec": opponent_spec,
+        "agent_deck_id": current_agent_deck_id,
+        "agent_archetype": current_agent_archetype,
+        "opponent_deck_id": opponent_deck_id,
+        "opponent_archetype": opponent_archetype,
+    }
     if agent_side == 0:
-        result = run_episode(agent, opponent, agent_deck, opponent_deck, config=agent_config)
+        result = run_episode(
+            agent,
+            opponent,
+            agent_deck,
+            opponent_deck,
+            config=agent_config,
+            collect_decisions=collect_decisions,
+            decision_metadata=base_decision_metadata,
+            player_roles={0: {"side": "agent"}, 1: {"side": "opponent"}},
+        )
         agent_prizes, opponent_prizes = result.final_prizes
     else:
-        result = run_episode(opponent, agent, opponent_deck, agent_deck, config=agent_config)
+        result = run_episode(
+            opponent,
+            agent,
+            opponent_deck,
+            agent_deck,
+            config=agent_config,
+            collect_decisions=collect_decisions,
+            decision_metadata=base_decision_metadata,
+            player_roles={0: {"side": "opponent"}, 1: {"side": "agent"}},
+        )
         opponent_prizes, agent_prizes = result.final_prizes
 
     if result.winner == agent_side:
@@ -140,7 +167,7 @@ def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, s
             coverage_rows.append({"game": game, "side": "agent", **agent_coverage})
         if opponent_coverage:
             coverage_rows.append({"game": game, "side": "opponent", **opponent_coverage})
-    return row, coverage_rows
+    return row, coverage_rows, result.decisions
 
 
 def _worker_count(workers: int | None) -> int:
@@ -161,6 +188,7 @@ def evaluate(
     opponent_decks: str | None = None,
     sequence_options: dict[str, bool] | None = None,
     workers: int = 1,
+    decision_log: bool = False,
 ) -> dict:
     config = load_config(config_path)
     deck = read_deck(config=config)
@@ -172,12 +200,13 @@ def evaluate(
     name = f"{_slug(agent_spec)}_vs_{_slug(opponent_spec)}"
     jsonl_path = out_path / f"eval_{name}_{stamp}.jsonl"
     csv_path = out_path / f"eval_{name}_{stamp}.csv"
+    decision_jsonl_path = out_path / f"decisions_{name}_{stamp}.jsonl" if decision_log else None
     wins = losses = draws = invalid = total_steps = 0
     prize_diffs: list[int] = []
     coverage_rows: list[dict[str, object]] = []
     worker_count = _worker_count(workers)
     game_args = [
-        (game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options)
+        (game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options, decision_log)
         for game in range(games)
     ]
     if worker_count > 1 and games > 1:
@@ -190,7 +219,7 @@ def evaluate(
     with jsonl_path.open("w", encoding="utf-8") as jsonl, csv_path.open("w", encoding="utf-8", newline="") as csv_fh:
         writer = csv.DictWriter(csv_fh, fieldnames=EVAL_FIELDNAMES)
         writer.writeheader()
-        for row, game_coverage_rows in results:
+        for row, game_coverage_rows, _game_decision_rows in results:
             if row["result"] == "win":
                 wins += 1
             elif row["result"] == "draw":
@@ -204,6 +233,11 @@ def evaluate(
             coverage_rows.extend(game_coverage_rows)
             writer.writerow(row)
             jsonl.write(json.dumps(row) + "\n")
+    if decision_jsonl_path is not None:
+        with decision_jsonl_path.open("w", encoding="utf-8") as decision_fh:
+            for _row, _game_coverage_rows, game_decision_rows in results:
+                for decision_row in game_decision_rows:
+                    decision_fh.write(json.dumps(decision_row, sort_keys=True) + "\n")
 
     summary = {
         "agent": agent_spec,
@@ -224,6 +258,7 @@ def evaluate(
         "planner_coverage": _coverage_summary(coverage_rows),
         "jsonl": str(jsonl_path),
         "csv": str(csv_path),
+        "decision_jsonl": str(decision_jsonl_path) if decision_jsonl_path is not None else None,
     }
     print(json.dumps(summary, indent=2))
     return summary
@@ -274,6 +309,7 @@ def main() -> None:
     parser.add_argument("--disable-value-proxy", action="store_true")
     parser.add_argument("--disable-fallback-guardrail", action="store_true")
     parser.add_argument("--planner-coverage-report", action="store_true")
+    parser.add_argument("--decision-log", action="store_true", help="Write structured per-decision JSONL diagnostics.")
     parser.add_argument("--num-hidden-samples", type=int, default=1)
     parser.add_argument("--workers", type=int, default=1, help="Run games across this many worker processes.")
     args = parser.parse_args()
@@ -297,6 +333,7 @@ def main() -> None:
         opponent_decks=args.opponent_decks,
         sequence_options=sequence_options,
         workers=args.workers,
+        decision_log=args.decision_log,
     )
     if args.planner_coverage_report:
         print(json.dumps({"planner_coverage_report": summary}, indent=2))
