@@ -24,7 +24,13 @@ from .deck_db import deck_counts, deck_heuristic_config, expand_deck, iter_decks
 from .decision_engine import DecisionEngine
 from .engine import EpisodeResult
 from .features import combine_feature_dicts, extract_action_features, score_features
-from .mlp_ranker import DEFAULT_EXCLUDED_FEATURES, MLPSequenceRanker, pretrain_mlp_ranker
+from .mlp_ranker import (
+    DEFAULT_EXCLUDED_FEATURES,
+    MLPSequenceRanker,
+    pretrain_mlp_ranker,
+    pretrain_mlp_ranker_torch,
+    torch_available,
+)
 from .policy import RandomPolicy, load_weights
 from .progress import progress_iter
 from .reward import transition_reward
@@ -1637,11 +1643,11 @@ def rl_self_play_mlp(
                     "mlp_score_weight": mlp_score_weight,
                     "clean_evaluator": clean_evaluator,
                 }
-                model.save(out_path / f"checkpoint_{game}.json", summary=summary)
-                model.save(out_path / "latest.json", summary=summary)
+                model.save_pt(out_path / f"checkpoint_{game}.pt", summary=summary)
+                model.save_pt(out_path / "latest.pt", summary=summary)
                 if recent_score >= best_recent:
                     best_recent = recent_score
-                    model.save(out_path / "best.json", summary=summary)
+                    model.save_pt(out_path / "best.pt", summary=summary)
 
     summary = {
         "games": games,
@@ -1653,8 +1659,8 @@ def rl_self_play_mlp(
         "average_steps": total_steps / games if games else 0.0,
         "total_updates": total_updates,
         "metrics": str(metrics_path),
-        "best_checkpoint": str(out_path / "best.json"),
-        "latest_checkpoint": str(out_path / "latest.json"),
+        "best_checkpoint": str(out_path / "best.pt"),
+        "latest_checkpoint": str(out_path / "latest.pt"),
         "clean_evaluator": clean_evaluator,
     }
     print(json.dumps(summary, indent=2))
@@ -1772,11 +1778,11 @@ def rl_against_sequence_mlp(
                     "linear_score_weight": linear_score_weight,
                     "mlp_score_weight": mlp_score_weight,
                 }
-                model.save(out_path / f"checkpoint_{game}.json", summary=summary)
-                model.save(out_path / "latest.json", summary=summary)
+                model.save_pt(out_path / f"checkpoint_{game}.pt", summary=summary)
+                model.save_pt(out_path / "latest.pt", summary=summary)
                 if recent_score >= best_recent:
                     best_recent = recent_score
-                    model.save(out_path / "best.json", summary=summary)
+                    model.save_pt(out_path / "best.pt", summary=summary)
 
     summary = {
         "games": games,
@@ -1788,8 +1794,8 @@ def rl_against_sequence_mlp(
         "average_steps": total_steps / games if games else 0.0,
         "total_updates": total_updates,
         "metrics": str(metrics_path),
-        "best_checkpoint": str(out_path / "best.json"),
-        "latest_checkpoint": str(out_path / "latest.json"),
+        "best_checkpoint": str(out_path / "best.pt"),
+        "latest_checkpoint": str(out_path / "latest.pt"),
     }
     print(json.dumps(summary, indent=2))
     return summary
@@ -1896,6 +1902,11 @@ def main() -> None:
     pretrain_mlp.add_argument("--validation-fraction", type=float, default=0.10)
     pretrain_mlp.add_argument("--include-linear-score", action="store_true", help="Allow linear_score as an MLP input feature. mlp_score remains excluded as a diagnostic leakage feature.")
     pretrain_mlp.add_argument("--progress", action="store_true", help="Show MLP training progress on stderr.")
+    pretrain_mlp.add_argument("--backend", choices=("torch", "python", "auto"), default="torch")
+    pretrain_mlp.add_argument("--device", default="auto", help="Torch device for --backend=torch; auto prefers mps, then cuda, then cpu.")
+    pretrain_mlp.add_argument("--batch-size", type=int, default=256, help="Torch training batch size.")
+    pretrain_mlp.add_argument("--cache-examples", type=int, default=0, help="Torch tensor-cache shard size. 0 streams JSONL every epoch.")
+    pretrain_mlp.add_argument("--cache-dir", "--mlp-cache-dir", dest="cache_dir", default=None, help="Directory for reusable torch tensor-cache shards.")
 
     rl = sub.add_parser("self-play", help="Fine-tune sequence weights with self-play returns.")
     rl.add_argument("--games", type=int, default=500)
@@ -2008,27 +2019,58 @@ def main() -> None:
             progress=args.progress,
         )
     elif args.cmd == "pretrain-mlp":
-        summary = pretrain_mlp_ranker(
-            args.labels,
-            out_dir=args.out_dir,
-            epochs=args.epochs,
-            lr=args.lr,
-            hidden_dim=args.hidden_dim,
-            hidden_dim2=args.hidden_dim2,
-            max_features=args.max_features,
-            min_feature_count=args.min_feature_count,
-            max_examples=args.max_examples,
-            seed=args.seed,
-            temperature=args.temperature,
-            l2=args.l2,
-            input_clip=args.input_clip,
-            grad_clip=args.grad_clip,
-            normalization=args.normalization,
-            feature_schema_version=args.feature_schema_version,
-            validation_fraction=args.validation_fraction,
-            exclude_features=("mlp_score",) if args.include_linear_score else DEFAULT_EXCLUDED_FEATURES,
-            progress=args.progress,
-        )
+        exclude_features = ("mlp_score",) if args.include_linear_score else DEFAULT_EXCLUDED_FEATURES
+        backend = args.backend
+        if backend == "auto":
+            backend = "torch" if torch_available() else "python"
+        if backend == "torch":
+            summary = pretrain_mlp_ranker_torch(
+                args.labels,
+                out_dir=args.out_dir,
+                epochs=args.epochs,
+                lr=args.lr,
+                hidden_dim=args.hidden_dim,
+                hidden_dim2=args.hidden_dim2,
+                max_features=args.max_features,
+                min_feature_count=args.min_feature_count,
+                max_examples=args.max_examples,
+                seed=args.seed,
+                temperature=args.temperature,
+                l2=args.l2,
+                input_clip=args.input_clip,
+                grad_clip=args.grad_clip,
+                normalization=args.normalization,
+                feature_schema_version=args.feature_schema_version,
+                validation_fraction=args.validation_fraction,
+                exclude_features=exclude_features,
+                progress=args.progress,
+                device=args.device,
+                batch_size=args.batch_size,
+                cache_examples=args.cache_examples,
+                cache_dir=args.cache_dir,
+            )
+        else:
+            summary = pretrain_mlp_ranker(
+                args.labels,
+                out_dir=args.out_dir,
+                epochs=args.epochs,
+                lr=args.lr,
+                hidden_dim=args.hidden_dim,
+                hidden_dim2=args.hidden_dim2,
+                max_features=args.max_features,
+                min_feature_count=args.min_feature_count,
+                max_examples=args.max_examples,
+                seed=args.seed,
+                temperature=args.temperature,
+                l2=args.l2,
+                input_clip=args.input_clip,
+                grad_clip=args.grad_clip,
+                normalization=args.normalization,
+                feature_schema_version=args.feature_schema_version,
+                validation_fraction=args.validation_fraction,
+                exclude_features=exclude_features,
+                progress=args.progress,
+            )
         print(json.dumps(summary, indent=2))
     elif args.cmd == "self-play":
         rl_self_play(

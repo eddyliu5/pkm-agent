@@ -149,7 +149,7 @@ Pretrain the sequence scorer with imitation learning:
   --epochs 5
 ```
 
-Pretrain the dependency-light MLP sequence ranker on the same candidate-label JSONL:
+Pretrain the PyTorch MLP sequence ranker on the same candidate-label JSONL:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.replay_pipeline pretrain-mlp \
@@ -160,10 +160,13 @@ Pretrain the dependency-light MLP sequence ranker on the same candidate-label JS
   --hidden-dim2 0 \
   --max-features 512 \
   --validation-fraction 0.10 \
-  --feature-schema-version full
+  --feature-schema-version full \
+  --backend torch \
+  --device auto \
+  --batch-size 256
 ```
 
-The MLP checkpoint is a JSON file with its feature vocabulary, input normalization stats, two hidden layers, validation metrics, and weights. It is intentionally framework-free so it can be loaded later without adding PyTorch or TensorFlow to the submission bundle.
+The current MLP checkpoint format is `best.pt`. It stores the feature vocabulary, input normalization stats, hidden-layer weights, and validation metrics. Legacy JSON checkpoints can still be loaded for debugging, but the main training and packaging flow now expects `.pt`.
 
 The runtime is intentionally strict. New MLP checkpoints must declare an explicit feature schema such as `full` or `clean`; legacy/unversioned checkpoints are unnecessary for the current workflow and should be retrained from scratch after architecture changes.
 
@@ -181,7 +184,7 @@ Fine-tune the MLP ranker with self-play returns:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.replay_pipeline self-play-mlp \
-  --model artifacts/checkpoints/mlp_ranker/best.json \
+  --model artifacts/checkpoints/mlp_ranker/best.pt \
   --out-dir artifacts/checkpoints/mlp_self_play \
   --games 5000 \
   --checkpoint-every 250
@@ -190,15 +193,15 @@ Fine-tune the MLP ranker with self-play returns:
 Evaluate an MLP checkpoint. Treat this as a candidate comparison against `sequence`, not as an automatic submission path:
 
 ```bash
-./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent heuristic --games 100
-./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent random --games 100 --opponent-decks deck_db
+./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.pt --opponent heuristic --games 100
+./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.pt --opponent random --games 100 --opponent-decks deck_db
 ```
 
 Evaluate an MLP checkpoint on top of learned sequence weights. This is unnecessary for the current main path and should be used only as an ablation:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_high_elo/best.json,artifacts/checkpoints/replay_pretrain_top_sample/best.json \
+  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_high_elo/best.pt,artifacts/checkpoints/replay_pretrain_top_sample/best.json \
   --opponent heuristic \
   --games 100
 ```
@@ -214,7 +217,7 @@ Package a combined sequence-weight plus MLP ablation only after it beats the str
 ```bash
 ./.venv/bin/python -m pokemon_agent.submission \
   --weights artifacts/checkpoints/replay_pretrain_top_sample/best.json \
-  --mlp-model artifacts/checkpoints/mlp_ranker_high_elo/best.json \
+  --mlp-model artifacts/checkpoints/mlp_ranker_high_elo/best.pt \
   --output artifacts/submission/mlp_sequence_submission.tar.gz
 ```
 
@@ -239,5 +242,5 @@ Evaluate a trained checkpoint:
 
 - `LinearQPolicy` is retained as a lightweight fallback/baseline policy, not as a standalone training path.
 - Legacy MLP schema compatibility and silent runtime fallback are unnecessary. Runtime/model/schema failures should fail fast and be fixed by regenerating labels and retraining.
-- The Kaggle submission path remains dependency-light and uses stdlib JSON MLP inference.
+- The Kaggle submission path now packages `mlp_model.pt` for MLP runs and expects PyTorch in the runtime environment.
 - Deterministic reliability coverage includes deck-reveal prize inference and submission import checks.

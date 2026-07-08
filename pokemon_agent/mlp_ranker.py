@@ -13,6 +13,7 @@ from .progress import progress_iter
 
 MODEL_TYPE = "mlp_sequence_ranker"
 SCHEMA_VERSION = 2
+TENSOR_CACHE_FORMAT_VERSION = 1
 DEFAULT_EXCLUDED_FEATURES = ("linear_score", "mlp_score")
 FEATURE_SCHEMA_ALIASES = {
     "sequence_v3_full": "full",
@@ -236,6 +237,41 @@ def _default_hidden_dim(input_dim: int) -> int:
     return 256
 
 
+def torch_available() -> bool:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _load_torch_checkpoint(path: Path) -> dict[str, Any]:
+    try:
+        import torch
+    except ImportError as exc:
+        raise ImportError("PyTorch is required to load .pt MLP checkpoints") from exc
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:
+        payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise ValueError(f"PyTorch checkpoint {path} did not contain a dictionary payload")
+    return payload
+
+
+def _torch_device(name: str):
+    import torch
+
+    requested = str(name or "auto").lower()
+    if requested == "auto":
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return torch.device("mps")
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+    return torch.device(requested)
+
+
 def _evaluate_ranker(
     model: "MLPSequenceRanker",
     labels_path: str | Path,
@@ -412,6 +448,42 @@ class MLPSequenceRanker:
     def from_payload(cls, payload: dict[str, Any]) -> "MLPSequenceRanker":
         if payload.get("model_type") != MODEL_TYPE:
             raise ValueError(f"Not an {MODEL_TYPE} payload")
+        if payload.get("checkpoint_format") == "torch_state_dict":
+            state_dict = payload.get("state_dict")
+            if not isinstance(state_dict, dict):
+                raise ValueError("Torch MLP checkpoint is missing state_dict")
+            hidden_dims = [int(value) for value in payload.get("hidden_dims", []) if int(value) > 0]
+            if not hidden_dims:
+                raise ValueError("Torch MLP checkpoint is missing hidden_dims")
+            hidden_layers = []
+            for index, _dim in enumerate(hidden_dims):
+                weight = state_dict.get(f"hidden_layers.{index}.weight")
+                bias = state_dict.get(f"hidden_layers.{index}.bias")
+                if weight is None or bias is None:
+                    raise ValueError(f"Torch MLP checkpoint is missing hidden layer {index}")
+                hidden_layers.append({"weights": weight.tolist(), "bias": bias.tolist()})
+            output_weight = state_dict.get("output_layer.weight")
+            output_bias = state_dict.get("output_layer.bias")
+            if output_weight is None or output_bias is None:
+                raise ValueError("Torch MLP checkpoint is missing output layer")
+            output_rows = output_weight.tolist()
+            if len(output_rows) != 1:
+                raise ValueError("Torch MLP output layer must have one row")
+            output_bias_values = output_bias.tolist()
+            if len(output_bias_values) != 1:
+                raise ValueError("Torch MLP output layer must have one bias")
+            return cls(
+                feature_names=list(payload["feature_names"]),
+                input_mean=list(payload["input_mean"]),
+                input_scale=list(payload["input_scale"]),
+                hidden_layers=hidden_layers,
+                output_weights=list(output_rows[0]),
+                output_bias=float(output_bias_values[0]),
+                input_clip=float(payload.get("input_clip", 8.0)),
+                activation=str(payload.get("activation", "relu")),
+                normalization=str(payload.get("normalization", "standard")),
+                feature_schema_version=str(payload["feature_schema_version"]),
+            )
         if "hidden_layers" in payload:
             return cls(
                 feature_names=list(payload["feature_names"]),
@@ -445,7 +517,10 @@ class MLPSequenceRanker:
 
     @classmethod
     def from_file(cls, path: str | Path) -> "MLPSequenceRanker":
-        with Path(path).open("r", encoding="utf-8") as fh:
+        checkpoint_path = Path(path)
+        if checkpoint_path.suffix.lower() in {".pt", ".pth"}:
+            return cls.from_payload(_load_torch_checkpoint(checkpoint_path))
+        with checkpoint_path.open("r", encoding="utf-8") as fh:
             return cls.from_payload(json.load(fh))
 
     def to_payload(self, summary: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -483,6 +558,43 @@ class MLPSequenceRanker:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("w", encoding="utf-8") as fh:
             json.dump(self.to_payload(summary=summary), fh, indent=2, sort_keys=True)
+
+    def to_torch_payload(self, summary: dict[str, Any] | None = None) -> dict[str, Any]:
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError("PyTorch is required to save .pt MLP checkpoints") from exc
+        state_dict: dict[str, Any] = {}
+        for index, (weights, bias) in enumerate(zip(self.layer_weights, self.layer_biases)):
+            state_dict[f"hidden_layers.{index}.weight"] = torch.tensor(weights, dtype=torch.float32)
+            state_dict[f"hidden_layers.{index}.bias"] = torch.tensor(bias, dtype=torch.float32)
+        state_dict["output_layer.weight"] = torch.tensor([self.output_weights], dtype=torch.float32)
+        state_dict["output_layer.bias"] = torch.tensor([self.output_bias], dtype=torch.float32)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "model_type": MODEL_TYPE,
+            "checkpoint_format": "torch_state_dict",
+            "feature_schema_version": self.feature_schema_version,
+            "feature_names": self.feature_names,
+            "input_mean": self.input_mean,
+            "input_scale": self.input_scale,
+            "hidden_dim": self.hidden_dim,
+            "hidden_dims": self.hidden_dims,
+            "activation": self.activation,
+            "normalization": self.normalization,
+            "input_clip": self.input_clip,
+            "state_dict": state_dict,
+            "summary": summary or {},
+        }
+
+    def save_pt(self, path: str | Path, summary: dict[str, Any] | None = None) -> None:
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError("PyTorch is required to save .pt MLP checkpoints") from exc
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(self.to_torch_payload(summary=summary), target)
 
     def vectorize(self, features: dict[str, float]) -> list[float]:
         values: list[float] = []
@@ -680,6 +792,862 @@ class MLPSequenceRanker:
 
         order = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
         return loss, order[0] == label_index, label_index in order[:3]
+
+
+def _torch_model_from_ranker(model: MLPSequenceRanker, device: Any):
+    import torch
+
+    class TorchMLP(torch.nn.Module):
+        def __init__(self, input_dim: int, hidden_dims: list[int]):
+            super().__init__()
+            self.hidden_layers = torch.nn.ModuleList()
+            previous_dim = input_dim
+            for dim in hidden_dims:
+                self.hidden_layers.append(torch.nn.Linear(previous_dim, dim))
+                previous_dim = dim
+            self.output_layer = torch.nn.Linear(previous_dim, 1)
+
+        def forward(self, inputs: Any) -> Any:
+            original_shape = inputs.shape[:-1]
+            current = inputs.reshape(-1, inputs.shape[-1])
+            for layer in self.hidden_layers:
+                current = torch.relu(layer(current))
+            scores = self.output_layer(current).squeeze(-1)
+            return scores.reshape(original_shape)
+
+    net = TorchMLP(len(model.feature_names), model.hidden_dims).to(device)
+    with torch.no_grad():
+        for layer, weights, bias in zip(net.hidden_layers, model.layer_weights, model.layer_biases):
+            layer.weight.copy_(torch.tensor(weights, dtype=torch.float32, device=device))
+            layer.bias.copy_(torch.tensor(bias, dtype=torch.float32, device=device))
+        net.output_layer.weight.copy_(torch.tensor([model.output_weights], dtype=torch.float32, device=device))
+        net.output_layer.bias.copy_(torch.tensor([model.output_bias], dtype=torch.float32, device=device))
+    return net
+
+
+def _ranker_from_torch_model(net: Any, template: MLPSequenceRanker) -> MLPSequenceRanker:
+    hidden_layers = []
+    for layer in net.hidden_layers:
+        hidden_layers.append(
+            {
+                "weights": layer.weight.detach().cpu().tolist(),
+                "bias": layer.bias.detach().cpu().tolist(),
+            }
+        )
+    output_rows = net.output_layer.weight.detach().cpu().tolist()
+    output_bias = net.output_layer.bias.detach().cpu().tolist()
+    return MLPSequenceRanker(
+        feature_names=template.feature_names,
+        input_mean=template.input_mean,
+        input_scale=template.input_scale,
+        hidden_layers=hidden_layers,
+        output_weights=list(output_rows[0]),
+        output_bias=float(output_bias[0]),
+        input_clip=template.input_clip,
+        activation=template.activation,
+        normalization=template.normalization,
+        feature_schema_version=template.feature_schema_version,
+    )
+
+
+def _iter_indexed_torch_examples(
+    labels_path: str | Path,
+    template: MLPSequenceRanker,
+    *,
+    max_examples: int | None,
+    excluded_features: tuple[str, ...],
+    split: str | None,
+    validation_fraction: float,
+    seed: int,
+) -> Iterable[tuple[int, list[list[tuple[int, float]]]]]:
+    sparse = template.normalization == "sparse"
+    for label_index, candidates in _iter_label_examples(
+        labels_path,
+        max_examples=max_examples,
+        excluded_features=excluded_features,
+        split=split,
+        validation_fraction=validation_fraction,
+        seed=seed,
+    ):
+        indexed_candidates: list[list[tuple[int, float]]] = []
+        for features in candidates:
+            items: list[tuple[int, float]] = []
+            if sparse:
+                for key, value in features.items():
+                    index = template.feature_index.get(str(key))
+                    if index is None:
+                        continue
+                    normalized = _clip(float(value) / template.input_scale[index], template.input_clip)
+                    if normalized:
+                        items.append((index, normalized))
+            else:
+                for index, name in enumerate(template.feature_names):
+                    normalized = _clip(
+                        (float(features.get(name, 0.0)) - template.input_mean[index]) / template.input_scale[index],
+                        template.input_clip,
+                    )
+                    if normalized:
+                        items.append((index, normalized))
+            indexed_candidates.append(items)
+        if indexed_candidates:
+            yield label_index, indexed_candidates
+
+
+def _materialize_torch_examples(
+    labels_path: str | Path,
+    template: MLPSequenceRanker,
+    *,
+    max_examples: int | None,
+    excluded_features: tuple[str, ...],
+    split: str | None,
+    validation_fraction: float,
+    seed: int,
+    progress: bool,
+    total: int | None = None,
+) -> list[tuple[int, list[list[tuple[int, float]]]]]:
+    return list(
+        progress_iter(
+            _iter_indexed_torch_examples(
+                labels_path,
+                template,
+                max_examples=max_examples,
+                excluded_features=excluded_features,
+                split=split,
+                validation_fraction=validation_fraction,
+                seed=seed,
+            ),
+            desc=f"torch materialize {split or 'all'}",
+            unit="ex",
+            total=total,
+            enabled=progress,
+        )
+    )
+
+
+def _torch_batch(
+    examples: list[tuple[int, list[list[tuple[int, float]]]]],
+    start: int,
+    batch_size: int,
+    *,
+    input_dim: int,
+    device: Any,
+):
+    import torch
+
+    batch = examples[start : start + batch_size]
+    max_candidates = max(len(candidates) for _label, candidates in batch)
+    inputs = torch.zeros((len(batch), max_candidates, input_dim), dtype=torch.float32)
+    valid = torch.zeros((len(batch), max_candidates), dtype=torch.bool)
+    labels = torch.empty((len(batch),), dtype=torch.long)
+    for batch_index, (label_index, candidates) in enumerate(batch):
+        labels[batch_index] = int(label_index)
+        for candidate_index, items in enumerate(candidates):
+            valid[batch_index, candidate_index] = True
+            for input_index, value in items:
+                inputs[batch_index, candidate_index, input_index] = float(value)
+    return inputs.to(device), labels.to(device), valid.to(device)
+
+
+def _torch_batch_from_examples(
+    batch: list[tuple[int, list[list[tuple[int, float]]]]],
+    *,
+    input_dim: int,
+    device: Any,
+):
+    import torch
+
+    max_candidates = max(len(candidates) for _label, candidates in batch)
+    inputs = torch.zeros((len(batch), max_candidates, input_dim), dtype=torch.float32)
+    valid = torch.zeros((len(batch), max_candidates), dtype=torch.bool)
+    labels = torch.empty((len(batch),), dtype=torch.long)
+    for batch_index, (label_index, candidates) in enumerate(batch):
+        labels[batch_index] = int(label_index)
+        for candidate_index, items in enumerate(candidates):
+            valid[batch_index, candidate_index] = True
+            for input_index, value in items:
+                inputs[batch_index, candidate_index, input_index] = float(value)
+    return inputs.to(device), labels.to(device), valid.to(device)
+
+
+def _torch_tensor_batch_from_examples(
+    batch: list[tuple[int, list[list[tuple[int, float]]]]],
+    *,
+    input_dim: int,
+):
+    import torch
+
+    max_candidates = max(len(candidates) for _label, candidates in batch)
+    inputs = torch.zeros((len(batch), max_candidates, input_dim), dtype=torch.float32)
+    valid = torch.zeros((len(batch), max_candidates), dtype=torch.bool)
+    labels = torch.empty((len(batch),), dtype=torch.long)
+    for batch_index, (label_index, candidates) in enumerate(batch):
+        labels[batch_index] = int(label_index)
+        for candidate_index, items in enumerate(candidates):
+            valid[batch_index, candidate_index] = True
+            for input_index, value in items:
+                inputs[batch_index, candidate_index, input_index] = float(value)
+    return {"inputs": inputs, "labels": labels, "valid": valid}
+
+
+def _write_torch_tensor_cache(
+    labels_path: str | Path,
+    template: MLPSequenceRanker,
+    *,
+    cache_dir: Path,
+    prefix: str,
+    max_examples: int | None,
+    excluded_features: tuple[str, ...],
+    split: str | None,
+    validation_fraction: float,
+    seed: int,
+    input_dim: int,
+    shard_examples: int,
+    progress: bool,
+    total: int | None = None,
+) -> list[Path]:
+    import torch
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for stale in cache_dir.glob(f"{prefix}_*.pt"):
+        stale.unlink()
+    shard_paths: list[Path] = []
+    batch: list[tuple[int, list[list[tuple[int, float]]]]] = []
+    iterator = progress_iter(
+        _iter_indexed_torch_examples(
+            labels_path,
+            template,
+            max_examples=max_examples,
+            excluded_features=excluded_features,
+            split=split,
+            validation_fraction=validation_fraction,
+            seed=seed,
+        ),
+        desc=f"torch cache {prefix}",
+        unit="ex",
+        total=total,
+        enabled=progress,
+    )
+
+    def flush() -> None:
+        if not batch:
+            return
+        payload = _torch_tensor_batch_from_examples(batch, input_dim=input_dim)
+        path = cache_dir / f"{prefix}_{len(shard_paths):05d}.pt"
+        torch.save(payload, path)
+        shard_paths.append(path)
+        batch.clear()
+
+    for example in iterator:
+        batch.append(example)
+        if len(batch) >= shard_examples:
+            flush()
+    flush()
+    return shard_paths
+
+
+def _load_torch_tensor_shard(path: Path) -> dict[str, Any]:
+    import torch
+
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:
+        payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise ValueError(f"Torch cache shard {path} did not contain a dictionary payload")
+    return payload
+
+
+def _tensor_cache_metadata_path(cache_dir: Path) -> Path:
+    return cache_dir / "metadata.json"
+
+
+def _relative_shard_names(cache_dir: Path, paths: list[Path]) -> list[str]:
+    return [str(path.relative_to(cache_dir)) for path in paths]
+
+
+def _cache_request_payload(
+    labels_path: str | Path,
+    *,
+    max_features: int,
+    min_feature_count: int,
+    max_examples: int | None,
+    seed: int,
+    validation_fraction: float,
+    exclude_features: tuple[str, ...],
+    input_clip: float,
+    normalization: str,
+    feature_schema_version: str,
+) -> dict[str, Any]:
+    return {
+        "labels": str(labels_path),
+        "max_features": int(max_features),
+        "min_feature_count": int(min_feature_count),
+        "max_examples": max_examples,
+        "seed": int(seed),
+        "validation_fraction": float(validation_fraction),
+        "excluded_features": list(exclude_features),
+        "input_clip": float(input_clip),
+        "normalization": str(normalization),
+        "feature_schema_version": canonical_feature_schema_version(feature_schema_version),
+    }
+
+
+def _cache_request_matches(metadata: dict[str, Any], request: dict[str, Any]) -> bool:
+    cached = metadata.get("request")
+    return isinstance(cached, dict) and cached == request
+
+
+def _write_tensor_cache_metadata(
+    cache_dir: Path,
+    *,
+    request: dict[str, Any],
+    feature_stats: FeatureStats,
+    template: MLPSequenceRanker,
+    shard_examples: int,
+    train_shards: list[Path],
+    validation_shards: list[Path],
+) -> dict[str, Any]:
+    metadata = {
+        "format": "pokemon_agent_mlp_tensor_cache",
+        "format_version": TENSOR_CACHE_FORMAT_VERSION,
+        "request": request,
+        "feature_names": feature_stats.names,
+        "feature_stats_mean": feature_stats.mean,
+        "input_mean": template.input_mean,
+        "input_scale": template.input_scale,
+        "feature_counts": feature_stats.feature_counts,
+        "example_count": feature_stats.example_count,
+        "candidate_count": feature_stats.candidate_count,
+        "shard_examples": int(shard_examples),
+        "train_shards": _relative_shard_names(cache_dir, train_shards),
+        "validation_shards": _relative_shard_names(cache_dir, validation_shards),
+    }
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with _tensor_cache_metadata_path(cache_dir).open("w", encoding="utf-8") as fh:
+        json.dump(metadata, fh, indent=2, sort_keys=True)
+    return metadata
+
+
+def _load_tensor_cache_metadata(cache_dir: Path, *, request: dict[str, Any]) -> dict[str, Any] | None:
+    path = _tensor_cache_metadata_path(cache_dir)
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as fh:
+        metadata = json.load(fh)
+    if metadata.get("format") != "pokemon_agent_mlp_tensor_cache":
+        return None
+    if int(metadata.get("format_version", 0)) != TENSOR_CACHE_FORMAT_VERSION:
+        return None
+    if not _cache_request_matches(metadata, request):
+        return None
+    train_shards = [cache_dir / str(name) for name in metadata.get("train_shards", [])]
+    validation_shards = [cache_dir / str(name) for name in metadata.get("validation_shards", [])]
+    if not train_shards or any(not path.exists() for path in train_shards + validation_shards):
+        return None
+    return metadata
+
+
+def _feature_stats_from_cache_metadata(metadata: dict[str, Any]) -> FeatureStats:
+    return FeatureStats(
+        names=[str(name) for name in metadata["feature_names"]],
+        mean=[float(value) for value in metadata["feature_stats_mean"]],
+        scale=[float(value) if float(value) else 1.0 for value in metadata["input_scale"]],
+        feature_counts={str(key): int(value) for key, value in dict(metadata.get("feature_counts", {})).items()},
+        example_count=int(metadata.get("example_count", 0)),
+        candidate_count=int(metadata.get("candidate_count", 0)),
+    )
+
+
+def _evaluate_torch_ranker(
+    net: Any,
+    examples: list[tuple[int, list[list[tuple[int, float]]]]],
+    *,
+    input_dim: int,
+    batch_size: int,
+    device: Any,
+    temperature: float,
+    progress: bool,
+    desc: str,
+) -> dict[str, float]:
+    import torch
+
+    if not examples:
+        return {"examples": 0.0, "average_loss": 0.0, "top1_accuracy": 0.0, "top3_accuracy": 0.0}
+    net.eval()
+    total_loss = 0.0
+    total_examples = 0
+    top1 = 0
+    top3 = 0
+    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
+    starts = range(0, len(examples), max(1, int(batch_size)))
+    with torch.no_grad():
+        for start in progress_iter(starts, desc=desc, unit="batch", enabled=progress):
+            inputs, labels, valid = _torch_batch(
+                examples,
+                start,
+                batch_size,
+                input_dim=input_dim,
+                device=device,
+            )
+            scores = net(inputs).masked_fill(~valid, -1.0e9)
+            logits = scores / max(1e-6, float(temperature))
+            loss = loss_fn(logits, labels)
+            order = torch.argsort(scores, dim=1, descending=True)
+            total_loss += float(loss.item())
+            total_examples += int(labels.numel())
+            top1 += int((order[:, 0] == labels).sum().item())
+            top3_width = min(3, order.shape[1])
+            top3 += int((order[:, :top3_width] == labels.unsqueeze(1)).any(dim=1).sum().item())
+    return {
+        "examples": float(total_examples),
+        "average_loss": total_loss / total_examples if total_examples else 0.0,
+        "top1_accuracy": top1 / total_examples if total_examples else 0.0,
+        "top3_accuracy": top3 / total_examples if total_examples else 0.0,
+    }
+
+
+def _evaluate_torch_ranker_streaming(
+    net: Any,
+    labels_path: str | Path,
+    template: MLPSequenceRanker,
+    *,
+    max_examples: int | None,
+    excluded_features: tuple[str, ...],
+    split: str | None,
+    validation_fraction: float,
+    seed: int,
+    input_dim: int,
+    batch_size: int,
+    device: Any,
+    temperature: float,
+    progress: bool,
+    desc: str,
+) -> dict[str, float]:
+    import torch
+
+    net.eval()
+    total_loss = 0.0
+    total_examples = 0
+    top1 = 0
+    top3 = 0
+    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
+    batch: list[tuple[int, list[list[tuple[int, float]]]]] = []
+
+    def consume(current_batch: list[tuple[int, list[list[tuple[int, float]]]]]) -> None:
+        nonlocal total_loss, total_examples, top1, top3
+        if not current_batch:
+            return
+        inputs, labels, valid = _torch_batch_from_examples(
+            current_batch,
+            input_dim=input_dim,
+            device=device,
+        )
+        scores = net(inputs).masked_fill(~valid, -1.0e9)
+        logits = scores / max(1e-6, float(temperature))
+        loss = loss_fn(logits, labels)
+        order = torch.argsort(scores, dim=1, descending=True)
+        total_loss += float(loss.item())
+        total_examples += int(labels.numel())
+        top1 += int((order[:, 0] == labels).sum().item())
+        top3_width = min(3, order.shape[1])
+        top3 += int((order[:, :top3_width] == labels.unsqueeze(1)).any(dim=1).sum().item())
+
+    eval_iter = progress_iter(
+        _iter_indexed_torch_examples(
+            labels_path,
+            template,
+            max_examples=max_examples,
+            excluded_features=excluded_features,
+            split=split,
+            validation_fraction=validation_fraction,
+            seed=seed,
+        ),
+        desc=desc,
+        unit="ex",
+        enabled=progress,
+    )
+    with torch.no_grad():
+        for example in eval_iter:
+            batch.append(example)
+            if len(batch) >= batch_size:
+                consume(batch)
+                batch = []
+        consume(batch)
+
+    return {
+        "examples": float(total_examples),
+        "average_loss": total_loss / total_examples if total_examples else 0.0,
+        "top1_accuracy": top1 / total_examples if total_examples else 0.0,
+        "top3_accuracy": top3 / total_examples if total_examples else 0.0,
+    }
+
+
+def _evaluate_torch_ranker_cached(
+    net: Any,
+    shard_paths: list[Path],
+    *,
+    batch_size: int,
+    device: Any,
+    temperature: float,
+    progress: bool,
+    desc: str,
+) -> dict[str, float]:
+    import torch
+
+    if not shard_paths:
+        return {"examples": 0.0, "average_loss": 0.0, "top1_accuracy": 0.0, "top3_accuracy": 0.0}
+    net.eval()
+    total_loss = 0.0
+    total_examples = 0
+    top1 = 0
+    top3 = 0
+    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
+    with torch.no_grad():
+        for shard_path in progress_iter(shard_paths, desc=desc, unit="shard", enabled=progress):
+            payload = _load_torch_tensor_shard(shard_path)
+            inputs_cpu = payload["inputs"]
+            labels_cpu = payload["labels"]
+            valid_cpu = payload["valid"]
+            shard_count = int(labels_cpu.shape[0])
+            for start in range(0, shard_count, batch_size):
+                end = min(shard_count, start + batch_size)
+                inputs = inputs_cpu[start:end].to(device)
+                labels = labels_cpu[start:end].to(device)
+                valid = valid_cpu[start:end].to(device)
+                scores = net(inputs).masked_fill(~valid, -1.0e9)
+                logits = scores / max(1e-6, float(temperature))
+                loss = loss_fn(logits, labels)
+                order = torch.argsort(scores, dim=1, descending=True)
+                total_loss += float(loss.item())
+                total_examples += int(labels.numel())
+                top1 += int((order[:, 0] == labels).sum().item())
+                top3_width = min(3, order.shape[1])
+                top3 += int((order[:, :top3_width] == labels.unsqueeze(1)).any(dim=1).sum().item())
+    return {
+        "examples": float(total_examples),
+        "average_loss": total_loss / total_examples if total_examples else 0.0,
+        "top1_accuracy": top1 / total_examples if total_examples else 0.0,
+        "top3_accuracy": top3 / total_examples if total_examples else 0.0,
+    }
+
+
+def _save_torch_training_checkpoint(
+    model: MLPSequenceRanker,
+    path: Path,
+    *,
+    summary: dict[str, Any],
+) -> None:
+    import torch
+
+    payload = model.to_torch_payload(summary=summary)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(payload, path)
+
+
+def pretrain_mlp_ranker_torch(
+    labels_path: str | Path,
+    *,
+    out_dir: str = "artifacts/checkpoints/mlp_ranker",
+    epochs: int = 3,
+    lr: float = 0.001,
+    hidden_dim: int = 0,
+    hidden_dim2: int = 0,
+    max_features: int = 256,
+    min_feature_count: int = 1,
+    max_examples: int | None = None,
+    seed: int = 13,
+    temperature: float = 1.0,
+    l2: float = 1e-5,
+    input_clip: float = 8.0,
+    grad_clip: float = 5.0,
+    normalization: str = "sparse",
+    feature_schema_version: str = "full",
+    validation_fraction: float = 0.10,
+    exclude_features: tuple[str, ...] = DEFAULT_EXCLUDED_FEATURES,
+    progress: bool = False,
+    device: str = "auto",
+    batch_size: int = 256,
+    cache_examples: int = 0,
+    cache_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    import torch
+
+    feature_schema_version = canonical_feature_schema_version(feature_schema_version)
+    validation_fraction = max(0.0, min(0.9, float(validation_fraction)))
+    request = _cache_request_payload(
+        labels_path,
+        max_features=max_features,
+        min_feature_count=min_feature_count,
+        max_examples=max_examples,
+        seed=seed,
+        validation_fraction=validation_fraction,
+        exclude_features=exclude_features,
+        input_clip=input_clip,
+        normalization=normalization,
+        feature_schema_version=feature_schema_version,
+    )
+    cache_examples = max(0, int(cache_examples))
+    tensor_cache_dir = Path(cache_dir) if cache_dir else None
+    cache_metadata = (
+        _load_tensor_cache_metadata(tensor_cache_dir, request=request)
+        if tensor_cache_dir is not None
+        else None
+    )
+    if cache_metadata is not None:
+        stats = _feature_stats_from_cache_metadata(cache_metadata)
+    else:
+        stats = build_feature_stats(
+            labels_path,
+            max_features=max_features,
+            min_feature_count=min_feature_count,
+            max_examples=max_examples,
+            excluded_features=exclude_features,
+            validation_fraction=validation_fraction,
+            seed=seed,
+            progress=progress,
+        )
+    hidden_dim = int(hidden_dim) if int(hidden_dim) > 0 else _default_hidden_dim(len(stats.names))
+    hidden_dim2 = int(hidden_dim2) if int(hidden_dim2) > 0 else max(16, hidden_dim // 2)
+    template = MLPSequenceRanker.initialize(
+        feature_stats=stats,
+        hidden_dim=hidden_dim,
+        hidden_dim2=hidden_dim2,
+        seed=seed,
+        input_clip=input_clip,
+        normalization=normalization,
+        feature_schema_version=feature_schema_version,
+    )
+    selected_device = _torch_device(device)
+    net = _torch_model_from_ranker(template, selected_device)
+    optimizer = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=l2)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    latest_path = out_path / "latest.pt"
+    best_path = out_path / "best.pt"
+    best_score = -1.0
+    summary: dict[str, Any] = {}
+    batch_size = max(1, int(batch_size))
+    if tensor_cache_dir is None:
+        tensor_cache_dir = out_path / "tensor_cache"
+    elif cache_examples <= 0 and cache_metadata is None:
+        cache_examples = 8192
+    train_shards: list[Path] = []
+    validation_shards: list[Path] = []
+    reused_tensor_cache = False
+    if cache_metadata is not None:
+        train_shards = [tensor_cache_dir / str(name) for name in cache_metadata["train_shards"]]
+        validation_shards = [tensor_cache_dir / str(name) for name in cache_metadata.get("validation_shards", [])]
+        reused_tensor_cache = True
+    elif cache_examples > 0:
+        train_shards = _write_torch_tensor_cache(
+            labels_path,
+            template,
+            cache_dir=tensor_cache_dir,
+            prefix="train",
+            max_examples=max_examples,
+            excluded_features=exclude_features,
+            split="train",
+            validation_fraction=validation_fraction,
+            seed=seed,
+            input_dim=len(template.feature_names),
+            shard_examples=cache_examples,
+            progress=progress,
+            total=stats.example_count,
+        )
+        if validation_fraction > 0.0:
+            validation_shards = _write_torch_tensor_cache(
+                labels_path,
+                template,
+                cache_dir=tensor_cache_dir,
+                prefix="validation",
+                max_examples=max_examples,
+                excluded_features=exclude_features,
+                split="validation",
+                validation_fraction=validation_fraction,
+                seed=seed,
+                input_dim=len(template.feature_names),
+                shard_examples=cache_examples,
+                progress=progress,
+            )
+        _write_tensor_cache_metadata(
+            tensor_cache_dir,
+            request=request,
+            feature_stats=stats,
+            template=template,
+            shard_examples=cache_examples,
+            train_shards=train_shards,
+            validation_shards=validation_shards,
+        )
+
+    for epoch in range(1, max(1, int(epochs)) + 1):
+        net.train()
+        total_loss = 0.0
+        examples = 0
+        top1 = 0
+        top3 = 0
+
+        def train_tensor_batch(inputs: Any, labels: Any, valid: Any) -> None:
+            nonlocal total_loss, examples, top1, top3
+            optimizer.zero_grad(set_to_none=True)
+            scores = net(inputs).masked_fill(~valid, -1.0e9)
+            logits = scores / max(1e-6, float(temperature))
+            loss = loss_fn(logits, labels)
+            loss.backward()
+            if grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
+            optimizer.step()
+
+            with torch.no_grad():
+                order = torch.argsort(scores, dim=1, descending=True)
+                batch_count = int(labels.numel())
+                examples += batch_count
+                total_loss += float(loss.item()) * batch_count
+                top1 += int((order[:, 0] == labels).sum().item())
+                top3_width = min(3, order.shape[1])
+                top3 += int((order[:, :top3_width] == labels.unsqueeze(1)).any(dim=1).sum().item())
+
+        def train_example_batch(current_batch: list[tuple[int, list[list[tuple[int, float]]]]]) -> None:
+            if not current_batch:
+                return
+            inputs, labels, valid = _torch_batch_from_examples(
+                current_batch,
+                input_dim=len(template.feature_names),
+                device=selected_device,
+            )
+            train_tensor_batch(inputs, labels, valid)
+
+        if train_shards:
+            epoch_shards = list(train_shards)
+            random.Random(seed + epoch).shuffle(epoch_shards)
+            shard_iter = progress_iter(
+                epoch_shards,
+                desc=f"torch mlp epoch {epoch}/{max(1, int(epochs))}",
+                unit="shard",
+                enabled=progress,
+            )
+            for shard_path in shard_iter:
+                payload = _load_torch_tensor_shard(shard_path)
+                inputs_cpu = payload["inputs"]
+                labels_cpu = payload["labels"]
+                valid_cpu = payload["valid"]
+                shard_count = int(labels_cpu.shape[0])
+                order = torch.randperm(shard_count)
+                for start in range(0, shard_count, batch_size):
+                    indexes = order[start : start + batch_size]
+                    train_tensor_batch(
+                        inputs_cpu[indexes].to(selected_device),
+                        labels_cpu[indexes].to(selected_device),
+                        valid_cpu[indexes].to(selected_device),
+                    )
+        else:
+            batch: list[tuple[int, list[list[tuple[int, float]]]]] = []
+            train_iter = progress_iter(
+                _iter_indexed_torch_examples(
+                    labels_path,
+                    template,
+                    max_examples=max_examples,
+                    excluded_features=exclude_features,
+                    split="train",
+                    validation_fraction=validation_fraction,
+                    seed=seed,
+                ),
+                desc=f"torch mlp epoch {epoch}/{max(1, int(epochs))}",
+                unit="ex",
+                total=stats.example_count,
+                enabled=progress,
+            )
+            for example in train_iter:
+                batch.append(example)
+                if len(batch) >= batch_size:
+                    train_example_batch(batch)
+                    batch = []
+            train_example_batch(batch)
+
+        train_metrics = {
+            "examples": examples,
+            "average_loss": total_loss / examples if examples else 0.0,
+            "top1_accuracy": top1 / examples if examples else 0.0,
+            "top3_accuracy": top3 / examples if examples else 0.0,
+        }
+        if validation_shards:
+            validation_metrics = _evaluate_torch_ranker_cached(
+                net,
+                validation_shards,
+                batch_size=batch_size,
+                device=selected_device,
+                temperature=temperature,
+                progress=progress,
+                desc="torch mlp validation",
+            )
+        elif validation_fraction > 0.0:
+            validation_metrics = _evaluate_torch_ranker_streaming(
+                net,
+                labels_path,
+                template,
+                max_examples=max_examples,
+                excluded_features=exclude_features,
+                split="validation",
+                validation_fraction=validation_fraction,
+                seed=seed,
+                input_dim=len(template.feature_names),
+                batch_size=batch_size,
+                device=selected_device,
+                temperature=temperature,
+                progress=progress,
+                desc="torch mlp validation",
+            )
+        else:
+            validation_metrics = {"examples": 0.0, "average_loss": 0.0, "top1_accuracy": 0.0, "top3_accuracy": 0.0}
+        selection_metric = (
+            validation_metrics["top1_accuracy"]
+            if validation_metrics["examples"] > 0
+            else train_metrics["top1_accuracy"]
+        )
+        summary = {
+            "epoch": epoch,
+            "labels": str(labels_path),
+            "out_dir": str(out_path),
+            "backend": "torch",
+            "device": str(selected_device),
+            "batch_size": batch_size,
+            "materialize_examples": False,
+            "cache_examples": cache_examples,
+            "cache_dir": str(tensor_cache_dir) if (cache_examples > 0 or reused_tensor_cache) else "",
+            "reused_tensor_cache": reused_tensor_cache,
+            "cache_shards": len(train_shards),
+            "validation_cache_shards": len(validation_shards),
+            "examples": examples,
+            "candidate_vectors_for_stats": stats.candidate_count,
+            "feature_count": len(stats.names),
+            "hidden_dim": hidden_dim,
+            "hidden_dim2": hidden_dim2,
+            "hidden_dims": [hidden_dim, hidden_dim2],
+            "normalization": normalization,
+            "average_loss": train_metrics["average_loss"],
+            "top1_accuracy": train_metrics["top1_accuracy"],
+            "top3_accuracy": train_metrics["top3_accuracy"],
+            "train": train_metrics,
+            "validation": validation_metrics,
+            "validation_fraction": validation_fraction,
+            "selection_metric": "validation_top1_accuracy" if validation_metrics["examples"] > 0 else "train_top1_accuracy",
+            "selection_score": selection_metric,
+            "lr": lr,
+            "temperature": temperature,
+            "l2": l2,
+            "excluded_features": list(exclude_features),
+            "feature_schema_version": feature_schema_version,
+        }
+        exported = _ranker_from_torch_model(net, template)
+        _save_torch_training_checkpoint(exported, out_path / f"checkpoint_epoch_{epoch}.pt", summary=summary)
+        _save_torch_training_checkpoint(exported, latest_path, summary=summary)
+        if selection_metric >= best_score:
+            best_score = selection_metric
+            _save_torch_training_checkpoint(exported, best_path, summary=summary)
+
+    summary["latest_checkpoint"] = str(latest_path)
+    summary["best_checkpoint"] = str(best_path)
+    return summary
 
 
 def pretrain_mlp_ranker(

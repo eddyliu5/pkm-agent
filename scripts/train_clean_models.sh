@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # Full-from-scratch general training, trained-agent deck selection, package, submit, and baseline flow.
-# The MLP is still trained, but runtime defaults to auto policy selection. Auto uses the
-# safer sequence policy for deck sweep, then compares sequence vs MLP on selected-deck
+# The MLP is trained with PyTorch by default and writes best.pt. Runtime defaults to
+# auto policy selection: sequence for deck sweep, then sequence-vs-MLP selected-deck
 # baselines before packaging.
 #
 # Default run:
@@ -18,6 +18,7 @@ cd "$ROOT_DIR"
 # Retrain only the MLP from an existing raw label file:
 #   TRAIN_ONLY=1 SKIP_LABEL_GENERATION=1 SKIP_SEQUENCE_TRAIN=1 ./scripts/train_clean_models.sh
 # TRAIN_ONLY exits before deck sweep, baseline evaluation, packaging, and Kaggle submission.
+# This shell workflow requires MLP_BACKEND=torch so new MLP checkpoints are .pt-only.
 
 PYTHON="${PYTHON:-./.venv/bin/python}"
 INPUTS="${INPUTS:-artifacts/replays/kaggle}"
@@ -49,6 +50,12 @@ FILTER_PASSIVE_END_LABELS="${FILTER_PASSIVE_END_LABELS:-1}"
 PROGRESS="${PROGRESS:-1}"
 COMPACT_PROGRESS="${COMPACT_PROGRESS:-$PROGRESS}"
 MLP_PROGRESS="${MLP_PROGRESS:-$PROGRESS}"
+MLP_BACKEND="${MLP_BACKEND:-torch}"
+MLP_DEVICE="${MLP_DEVICE:-auto}"
+MLP_BATCH_SIZE="${MLP_BATCH_SIZE:-256}"
+MLP_CACHE_EXAMPLES="${MLP_CACHE_EXAMPLES:-8192}"
+MLP_CACHE_DIR="${MLP_CACHE_DIR:-}"
+MLP_MODEL_PATH="${MLP_MODEL_PATH:-}"
 
 FAST_DECK_SWEEP_GAMES="${FAST_DECK_SWEEP_GAMES:-600}"
 FAST_DECK_SWEEP_AGENT_DECKS="${FAST_DECK_SWEEP_AGENT_DECKS:-top_winrate}"
@@ -243,6 +250,15 @@ resolve_runtime_weights() {
   esac
 }
 
+resolve_mlp_model_path() {
+  if [[ -n "${MLP_MODEL_PATH:-}" ]]; then
+    require_file "$MLP_MODEL_PATH" "MLP .pt checkpoint"
+    return
+  fi
+  MLP_MODEL_PATH="${MLP_OUT}/best.pt"
+  require_file "$MLP_MODEL_PATH" "MLP .pt checkpoint"
+}
+
 assert_runtime_weight_safety() {
   if [[ -z "${RUNTIME_WEIGHTS_PATH:-}" || "$ALLOW_UNSAFE_RUNTIME_WEIGHTS" == "1" ]]; then
     return
@@ -291,10 +307,11 @@ configure_runtime_policy() {
       fi
       ;;
     "mlp")
+      resolve_mlp_model_path
       if [[ -n "${RUNTIME_WEIGHTS_PATH:-}" ]]; then
-        EVAL_AGENT="sequence-mlp:${MLP_OUT}/best.json,${RUNTIME_WEIGHTS_PATH}"
+        EVAL_AGENT="sequence-mlp:${MLP_MODEL_PATH},${RUNTIME_WEIGHTS_PATH}"
       else
-        EVAL_AGENT="sequence-mlp:${MLP_OUT}/best.json"
+        EVAL_AGENT="sequence-mlp:${MLP_MODEL_PATH}"
       fi
       ;;
     *)
@@ -411,6 +428,12 @@ mkdir -p \
   "$BASELINE_EVAL_OUT" \
   "$SUBMISSION_DIR"
 
+if [[ "$MLP_BACKEND" != "torch" ]]; then
+  printf 'scripts/train_clean_models.sh now requires MLP_BACKEND=torch for .pt-only MLP checkpoints; got %s\n' "$MLP_BACKEND" >&2
+  exit 2
+fi
+run "$PYTHON" -c 'import torch; mps = torch.backends.mps.is_available() if hasattr(torch.backends, "mps") else False; print("torch=%s mps=%s" % (torch.__version__, mps))'
+
 run "$PYTHON" -m compileall pokemon_agent
 
 split_inputs
@@ -478,26 +501,43 @@ if [[ "$SKIP_TRAIN" != "1" ]]; then
     --max-features "$MLP_MAX_FEATURES"
     --feature-schema-version full
     --validation-fraction "$VALIDATION_FRACTION"
+    --backend "$MLP_BACKEND"
+    --device "$MLP_DEVICE"
+    --batch-size "$MLP_BATCH_SIZE"
+    --cache-examples "$MLP_CACHE_EXAMPLES"
   )
+  if [[ -n "$MLP_CACHE_DIR" ]]; then
+    mlp_cmd+=(--mlp-cache-dir "$MLP_CACHE_DIR")
+  fi
   if [[ "$MLP_PROGRESS" == "1" ]]; then
     mlp_cmd+=(--progress)
   fi
   if [[ "$SKIP_MLP_TRAIN" != "1" ]]; then
     require_file "$COMPACT_LABELS" "Compact MLP label file"
     run "${mlp_cmd[@]}"
+    MLP_MODEL_PATH="${MLP_OUT}/best.pt"
+    require_file "$MLP_MODEL_PATH" "Trained MLP .pt checkpoint"
   else
-    require_file "${MLP_OUT}/best.json" "Existing MLP checkpoint"
-    printf '\n==> Skipping MLP training; using %s\n' "${MLP_OUT}/best.json"
+    resolve_mlp_model_path
+    printf '\n==> Skipping MLP training; using %s\n' "$MLP_MODEL_PATH"
   fi
 fi
 
 if [[ "$TRAIN_ONLY" == "1" ]]; then
+  if [[ -z "${MLP_MODEL_PATH:-}" && -s "${MLP_OUT}/best.pt" ]]; then
+    MLP_MODEL_PATH="${MLP_OUT}/best.pt"
+  fi
   printf '\nTraining flow complete.\n'
   printf 'General run:        %s\n' "$RUN_NAME"
   printf 'Replay labels:      %s\n' "$LABELS"
   printf 'Compact labels:     %s\n' "$COMPACT_LABELS"
   printf 'Sequence weights:   %s\n' "${SEQ_OUT}/best.json"
-  printf 'MLP ranker:         %s\n' "${MLP_OUT}/best.json"
+  printf 'MLP ranker:         %s\n' "${MLP_MODEL_PATH:-${MLP_OUT}/best.pt}"
+  printf 'MLP backend:         %s\n' "$MLP_BACKEND"
+  printf 'MLP device:          %s\n' "$MLP_DEVICE"
+  printf 'MLP batch size:      %s\n' "$MLP_BATCH_SIZE"
+  printf 'MLP cache examples:  %s\n' "$MLP_CACHE_EXAMPLES"
+  printf 'MLP cache dir:       %s\n' "${MLP_CACHE_DIR:-rebuild}"
   printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"
   printf 'Skipped label generation: %s\n' "$SKIP_LABEL_GENERATION"
   printf 'Skipped compact labels: %s\n' "$SKIP_COMPACT_LABELS"
@@ -575,7 +615,8 @@ if [[ "$SKIP_PACKAGE" != "1" ]]; then
     submission_cmd+=(--weights "$RUNTIME_WEIGHTS_PATH")
   fi
   if [[ "$RUNTIME_POLICY" == "mlp" ]]; then
-    submission_cmd+=(--mlp-model "${MLP_OUT}/best.json")
+    resolve_mlp_model_path
+    submission_cmd+=(--mlp-model "$MLP_MODEL_PATH")
   fi
   submission_cmd+=(--deck-id "$BEST_DECK_ID" --output "$SUBMISSION")
   run "${submission_cmd[@]}"
@@ -592,7 +633,12 @@ fi
 printf '\nFull-from-scratch flow complete.\n'
 printf 'General run:        %s\n' "$RUN_NAME"
 printf 'Sequence weights:   %s\n' "${SEQ_OUT}/best.json"
-printf 'MLP ranker:         %s\n' "${MLP_OUT}/best.json"
+printf 'MLP ranker:         %s\n' "${MLP_MODEL_PATH:-${MLP_OUT}/best.pt}"
+printf 'MLP backend:         %s\n' "$MLP_BACKEND"
+printf 'MLP device:          %s\n' "$MLP_DEVICE"
+printf 'MLP batch size:      %s\n' "$MLP_BATCH_SIZE"
+printf 'MLP cache examples:  %s\n' "$MLP_CACHE_EXAMPLES"
+printf 'MLP cache dir:       %s\n' "${MLP_CACHE_DIR:-rebuild}"
 printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"
 printf 'Requested runtime policy: %s\n' "$RUNTIME_POLICY_REQUESTED"
 printf 'Runtime policy:     %s\n' "$RUNTIME_POLICY"

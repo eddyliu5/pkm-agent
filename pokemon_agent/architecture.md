@@ -14,7 +14,7 @@ Module-level details live in each folder's `README.md`. This document is the pac
 
 ## Runtime Entrypoints
 
-`main.py` imports `pokemon_agent.runtime_agent.agent` for Kaggle submission. `runtime_agent.py` locates the bundle root, reads `deck.csv`, loads a deck config, optional `weights.json`, optional `mlp_model.json`, and optional `runtime_config.json`, then creates one process-global `DecisionEngine`.
+`main.py` imports `pokemon_agent.runtime_agent.agent` for Kaggle submission. `runtime_agent.py` locates the bundle root, reads `deck.csv`, loads a deck config, optional `weights.json`, optional `mlp_model.pt`, and optional `runtime_config.json`, then creates one process-global `DecisionEngine`.
 
 At inference time:
 
@@ -113,11 +113,11 @@ Card IDs come from `deck.csv`, `configs/*.json`, simulator observations, and `da
 
 Trainable or learned components are intentionally replaceable, but only the MLP ranker is the current improvement target:
 
-- JSON MLP sequence rankers in `mlp_model.json`
+- PyTorch MLP sequence rankers in `mlp_model.pt`
 - explicit sequence feature schemas in `SequenceFeaturizer` and `CleanSequenceFeaturizer`
 - replay and MLP training utilities in `replay_pipeline.py`
 
-The MLP ranker is a dependency-free two-hidden-layer model. Training excludes scorer-produced `linear_score`/`mlp_score` diagnostics from its input vocabulary, uses full-schema features by default, builds replay labels from each player's submitted deck when available, and selects best checkpoints from a deterministic replay-source validation split.
+The MLP ranker is a two-hidden-layer model trained with PyTorch by default and loaded from `.pt` checkpoints. Training excludes scorer-produced `linear_score`/`mlp_score` diagnostics from its input vocabulary, uses full-schema features by default, builds replay labels from each player's submitted deck when available, and selects best checkpoints from a deterministic replay-source validation split.
 
 Unnecessary for the current workflow:
 

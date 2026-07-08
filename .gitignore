@@ -26,6 +26,7 @@ wheels/
 /deck.csv
 /weights.json
 /mlp_model.json
+/mlp_model.pt
 /runtime_config.json
 submission.tar.gz
 *.tar.gz

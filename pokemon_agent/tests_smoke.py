@@ -22,7 +22,7 @@ from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_de
 from .engine import run_episode
 from .eval import _opponent_deck_pool
 from .features import default_weights, extract_action_features, score_features
-from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
+from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker, torch_available
 from .policy import HeuristicPolicy, RandomPolicy, SequencePolicy, make_policy
 from .opponent_memory import OpponentMemory
 from .probability import ProbabilityModel, hypergeometric_at_least_one, hypergeometric_pmf
@@ -909,37 +909,48 @@ def test_replay_pipeline_smoke() -> None:
         scores = model.score_batch([candidate["features"] for candidate in record["candidates"]])
         assert len(scores) == len(record["candidates"])
         assert all(isinstance(score, float) for score in scores)
+        packaged_mlp_path = mlp_path
+        expected_mlp_name = "mlp_model.json"
+        if torch_available():
+            pt_path = tmp_path / "mlp_pretrain" / "latest.pt"
+            model.save_pt(pt_path, summary={"test": "smoke"})
+            pt_model = MLPSequenceRanker.from_file(pt_path)
+            assert pt_model.hidden_dims == [4, 2]
+            packaged_mlp_path = pt_path
+            expected_mlp_name = "mlp_model.pt"
 
-        rl_summary = rl_self_play_mlp(
-            1,
-            model_path=str(mlp_path),
-            out_dir=str(tmp_path / "mlp_self_play"),
-            lr=0.0001,
-            epsilon_start=0.0,
-            epsilon_end=0.0,
-            checkpoint_every=1,
-        )
-        assert rl_summary["games"] == 1
-        assert rl_summary["invalid_actions"] == 0
-        assert Path(rl_summary["latest_checkpoint"]).exists()
+        if torch_available():
+            rl_summary = rl_self_play_mlp(
+                1,
+                model_path=str(packaged_mlp_path),
+                out_dir=str(tmp_path / "mlp_self_play"),
+                lr=0.0001,
+                epsilon_start=0.0,
+                epsilon_end=0.0,
+                checkpoint_every=1,
+            )
+            assert rl_summary["games"] == 1
+            assert rl_summary["invalid_actions"] == 0
+            assert Path(rl_summary["latest_checkpoint"]).exists()
 
-        combined = make_policy(f"sequence-mlp:{mlp_path},{train_summary['latest_checkpoint']}", config=config, seed=9)
+        combined = make_policy(f"sequence-mlp:{packaged_mlp_path},{train_summary['latest_checkpoint']}", config=config, seed=9)
         assert isinstance(combined, SequencePolicy)
         assert combined.engine.scorer.linear_weight == 0.0
         assert combined.engine.scorer.mlp_weight == 1.0
 
         bundled = build_submission(
             weights_path=train_summary["latest_checkpoint"],
-            mlp_model_path=str(mlp_path),
+            mlp_model_path=str(packaged_mlp_path),
             output=str(tmp_path / "mlp_submission.tar.gz"),
         )
         with tarfile.open(bundled, "r:gz") as tar:
             names = set(tar.getnames())
             runtime_config = json.loads(tar.extractfile("runtime_config.json").read().decode("utf-8"))  # type: ignore[union-attr]
-        assert "mlp_model.json" in names
+        assert expected_mlp_name in names
         assert "weights.json" in names
         assert runtime_config["linear_score_weight"] == 0.0
         assert runtime_config["mlp_score_weight"] == 1.0
+        assert runtime_config["mlp_model_file"] == expected_mlp_name
 
 
 def test_top_replay_planner_candidate_coverage() -> None:

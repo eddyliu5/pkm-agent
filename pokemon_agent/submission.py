@@ -50,8 +50,14 @@ def build_submission(
         weights = default_weights()
     with (build_dir / "weights.json").open("w", encoding="utf-8") as fh:
         json.dump({"weights": weights}, fh, indent=2, sort_keys=True)
+    packaged_mlp_model = None
     if mlp_model_path:
-        shutil.copy2(Path(mlp_model_path), build_dir / "mlp_model.json")
+        source_mlp_model = Path(mlp_model_path)
+        if source_mlp_model.suffix.lower() in {".pt", ".pth"}:
+            packaged_mlp_model = "mlp_model.pt"
+        else:
+            packaged_mlp_model = "mlp_model.json"
+        shutil.copy2(source_mlp_model, build_dir / packaged_mlp_model)
     linear_score_weight = 0.0 if mlp_model_path else 1.0
     with (build_dir / "runtime_config.json").open("w", encoding="utf-8") as fh:
         json.dump(
@@ -65,6 +71,7 @@ def build_submission(
                 "num_hidden_samples": 1,
                 "linear_score_weight": linear_score_weight,
                 "mlp_score_weight": 1.0,
+                "mlp_model_file": packaged_mlp_model,
             },
             fh,
             indent=2,
