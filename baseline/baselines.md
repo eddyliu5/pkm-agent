@@ -41,6 +41,7 @@ Run every serious candidate against these local opponents.
 | Starmie/Froslass Kaggle-best mirror | `--opponent sequence-starmie-froslass` | Tests against the saved best-scoring Starmie/Froslass sequence artifact. |
 | Sequence mirror | `--opponent sequence` | Strong head-to-head check against the current production search policy. A candidate should not collapse below parity. |
 | Sequence deck-db rotation | `--opponent sequence --opponent-decks deck_db` | Strong varied-deck check against search-based opponents. Use this before treating a local score as meaningful. |
+| Top-deck sequence matrix | `scripts/run_top_deck_sequence_compare.py` | Standard sequence-policy baseline. Runs each top observed-winrate self deck against a round-robin top-winrate `sequence` opponent pool with fixed per-round seeds. Default is 5 full 30-deck rotations, 150 games per self deck. |
 
 ## Baseline Gates
 
@@ -76,6 +77,14 @@ AGENT='<agent-spec>'
 ```
 
 Then compare against the same commands with `AGENT='sequence'` in a separate output directory, unless a fresh `sequence` baseline already exists from the same code state.
+
+For sequence-policy changes, also run the standardized top-deck matrix:
+
+```bash
+./.venv/bin/python scripts/run_top_deck_sequence_compare.py
+```
+
+Use `--rounds N` to change the number of complete top-deck opponent rotations. `--games` is retained for old automation, but it must be a multiple of the selected top-deck count. The default fixed seed schedule starts at `42` and is capped at 30 rounds.
 
 ## Stress Baselines
 

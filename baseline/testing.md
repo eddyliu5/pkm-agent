@@ -58,6 +58,14 @@ AGENT='<candidate-agent-spec>'
 
 If the baseline was already run from the same code state, reuse it and cite the artifact directory.
 
+For sequence-policy changes, run the standardized top-deck matrix as the main strength check:
+
+```bash
+./.venv/bin/python scripts/run_top_deck_sequence_compare.py
+```
+
+Default behavior is 5 complete top-winrate opponent rotations per self deck. With 30 selected top decks, that is 150 games per self deck and 4500 total `sequence` games. The runner uses a fixed per-round seed schedule, starting with seed `42`, and records the seeds in `manifest.json`.
+
 ## Final Candidate Run
 
 Use this before packaging a Kaggle candidate when time allows:
@@ -99,6 +107,7 @@ Every baseline report should include:
 - Local Kaggle proxy score from `kaggle_proxy.md`.
 - Paths to the JSONL and CSV artifacts.
 - Any crashes, timeouts, or simulator setup issues.
+- For top-deck matrix runs: rounds, seed schedule, total games, pooled win rate, mean deck win rate, invalid actions, and the artifact path under `baseline/compare/<run-id>/`.
 
 Use this short format in notes or pull requests:
 

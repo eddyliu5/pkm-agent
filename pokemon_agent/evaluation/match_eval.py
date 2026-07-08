@@ -23,6 +23,7 @@ EVAL_FIELDNAMES = [
     "opponent_archetype",
     "winner",
     "result",
+    "seed",
     "steps",
     "invalid_actions",
     "agent_prizes",
@@ -77,9 +78,12 @@ def _opponent_deck_pool(source: str | None) -> list[tuple[str, str, list[int]]]:
     return [(deck_id, archetype, deck) for deck_id, archetype, deck, _config in _deck_pool(source)]
 
 
-def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, str, list[int], dict]], list[tuple[str, str, list[int], dict]], dict[str, bool] | None, bool]) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]]]:
-    game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options, collect_decisions = args
-    agent_side = game % 2
+def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, str, list[int], dict]], list[tuple[str, str, list[int], dict]], dict[str, bool] | None, bool, tuple[int, ...], bool]) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]]]:
+    game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options, collect_decisions, seed_schedule, round_robin_opponents = args
+    rotation_size = len(opponent_pool) if opponent_pool else 0
+    rotation_round = game // rotation_size if rotation_size else game
+    agent_side = (game + rotation_round) % 2 if round_robin_opponents and rotation_size else game % 2
+    game_seed = seed_schedule[rotation_round % len(seed_schedule)] if seed_schedule else game * 17
     current_agent_deck_id = "default"
     current_agent_archetype = str(config.get("name", "default"))
     agent_deck = deck
@@ -96,12 +100,12 @@ def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, s
     opponent_deck = agent_deck
     opponent_config = agent_config
     if opponent_pool:
-        opponent_index = ((game * 7) + 3) % len(opponent_pool)
+        opponent_index = game % len(opponent_pool) if round_robin_opponents else ((game * 7) + 3) % len(opponent_pool)
         opponent_deck_id, opponent_archetype, opponent_deck, opponent_role_config = opponent_pool[opponent_index]
         opponent_config = dict(config)
         opponent_config.update(opponent_role_config)
-    agent = make_policy(agent_spec, config=agent_config, seed=game * 17 + 1, deck=agent_deck, sequence_options=sequence_options)
-    opponent = make_policy(opponent_spec, config=opponent_config, seed=game * 17 + 2, deck=opponent_deck, sequence_options=sequence_options)
+    agent = make_policy(agent_spec, config=agent_config, seed=game_seed, deck=agent_deck, sequence_options=sequence_options)
+    opponent = make_policy(opponent_spec, config=opponent_config, seed=game_seed + 1, deck=opponent_deck, sequence_options=sequence_options)
     base_decision_metadata = {
         "game": int(game),
         "agent_spec": agent_spec,
@@ -153,6 +157,7 @@ def _run_eval_game(args: tuple[int, str, str, dict, list[int], list[tuple[str, s
         "opponent_archetype": opponent_archetype,
         "winner": result.winner,
         "result": outcome,
+        "seed": game_seed,
         "steps": result.steps,
         "invalid_actions": result.invalid_actions,
         "agent_prizes": agent_prizes,
@@ -189,6 +194,8 @@ def evaluate(
     sequence_options: dict[str, bool] | None = None,
     workers: int = 1,
     decision_log: bool = False,
+    seed_schedule: tuple[int, ...] = (),
+    round_robin_opponents: bool = False,
 ) -> dict:
     config = load_config(config_path)
     deck = read_deck(config=config)
@@ -206,7 +213,19 @@ def evaluate(
     coverage_rows: list[dict[str, object]] = []
     worker_count = _worker_count(workers)
     game_args = [
-        (game, agent_spec, opponent_spec, config, deck, agent_pool, opponent_pool, sequence_options, decision_log)
+        (
+            game,
+            agent_spec,
+            opponent_spec,
+            config,
+            deck,
+            agent_pool,
+            opponent_pool,
+            sequence_options,
+            decision_log,
+            tuple(seed_schedule),
+            bool(round_robin_opponents),
+        )
         for game in range(games)
     ]
     if worker_count > 1 and games > 1:
@@ -254,6 +273,8 @@ def evaluate(
         "average_steps": total_steps / games if games else 0.0,
         "average_prize_diff": sum(prize_diffs) / games if games else 0.0,
         "sequence_options": sequence_options or {},
+        "seed_schedule": list(seed_schedule),
+        "round_robin_opponents": bool(round_robin_opponents),
         "workers": worker_count,
         "planner_coverage": _coverage_summary(coverage_rows),
         "jsonl": str(jsonl_path),
@@ -312,6 +333,8 @@ def main() -> None:
     parser.add_argument("--decision-log", action="store_true", help="Write structured per-decision JSONL diagnostics.")
     parser.add_argument("--num-hidden-samples", type=int, default=1)
     parser.add_argument("--workers", type=int, default=1, help="Run games across this many worker processes.")
+    parser.add_argument("--seed-list", default="", help="Comma-separated deterministic per-round seeds. The first seed is used for the first opponent rotation.")
+    parser.add_argument("--round-robin-opponents", action="store_true", help="Cycle opponent decks in exact pool order and alternate side by full opponent rotation.")
     args = parser.parse_args()
     sequence_options = {
         "probability_features_enabled": not args.disable_probability,
@@ -334,6 +357,8 @@ def main() -> None:
         sequence_options=sequence_options,
         workers=args.workers,
         decision_log=args.decision_log,
+        seed_schedule=tuple(int(value) for value in args.seed_list.split(",") if value.strip()) if args.seed_list else (),
+        round_robin_opponents=args.round_robin_opponents,
     )
     if args.planner_coverage_report:
         print(json.dumps({"planner_coverage_report": summary}, indent=2))

@@ -16,7 +16,39 @@ sys.path.insert(0, str(ROOT_DIR))
 from pokemon_agent.deck_db import load_deck_db, observed_win_rate, observed_wins, top_observed_winrate_decks
 
 
-AGENTS = ("sequence", "sequence-starmie-froslass")
+DEFAULT_AGENTS = ("sequence",)
+BASELINE_SEEDS = (
+    42,
+    1729,
+    8675309,
+    314159,
+    271828,
+    161803,
+    57721,
+    104729,
+    65537,
+    99991,
+    123457,
+    424243,
+    777777,
+    135791,
+    246802,
+    987643,
+    112358,
+    141421,
+    173205,
+    223607,
+    264575,
+    316227,
+    707107,
+    811811,
+    919191,
+    1000003,
+    1000033,
+    1000037,
+    1000039,
+    1000081,
+)
 
 
 def _run_id() -> str:
@@ -103,12 +135,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run sequence baselines for each top deck against top-deck opponents.")
     parser.add_argument("--run-id", default=_run_id())
     parser.add_argument("--out-root", default=None)
-    parser.add_argument("--games", type=int, default=100)
+    parser.add_argument("--rounds", type=int, default=5, help="Full top-deck opponent rotations per agent deck. Default 5 => 150 games with 30 top decks.")
+    parser.add_argument("--games", type=int, default=None, help="Legacy total games per agent deck. Must be divisible by the selected top-deck count.")
     parser.add_argument("--workers", type=int, default=32)
     parser.add_argument("--min-observed-wins", type=int, default=25)
     parser.add_argument("--top-n", type=int, default=None)
     parser.add_argument("--python", default="./.venv/bin/python")
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--agents", default=",".join(DEFAULT_AGENTS), help="Comma-separated agent specs to evaluate. Default: sequence.")
+    parser.add_argument("--seed-list", default="", help="Comma-separated per-round seeds. Defaults to the first --rounds fixed baseline seeds.")
     args = parser.parse_args()
 
     out_root = Path(args.out_root or f"baseline/compare/{args.run_id}")
@@ -123,22 +158,47 @@ def main() -> int:
         }
         for deck in decks
     ]
+    if not deck_records:
+        raise ValueError("No top decks selected")
+    if args.games is not None:
+        if args.games <= 0 or args.games % len(deck_records) != 0:
+            raise ValueError(f"--games must be a positive multiple of selected deck count ({len(deck_records)})")
+        rounds = args.games // len(deck_records)
+    else:
+        rounds = int(args.rounds)
+    if rounds <= 0:
+        raise ValueError("--rounds must be positive")
+    seed_schedule = tuple(int(value) for value in args.seed_list.split(",") if value.strip()) if args.seed_list else BASELINE_SEEDS[:rounds]
+    if not seed_schedule:
+        raise ValueError("Seed schedule cannot be empty")
+    if len(seed_schedule) > 30 or rounds > 30:
+        raise ValueError("Top-deck baseline is capped at 30 rounds/seeds for now")
+    if len(seed_schedule) < rounds:
+        raise ValueError(f"Seed schedule has {len(seed_schedule)} seeds but {rounds} rounds were requested")
+    seed_schedule = seed_schedule[:rounds]
+    games = rounds * len(deck_records)
+    agents = tuple(agent.strip() for agent in args.agents.split(",") if agent.strip())
+    if not agents:
+        raise ValueError("--agents cannot be empty")
     manifest = {
         "run_id": args.run_id,
-        "games_per_agent_deck": args.games,
+        "rounds_per_agent_deck": rounds,
+        "games_per_agent_deck": games,
         "workers": args.workers,
-        "agents": list(AGENTS),
+        "agents": list(agents),
         "opponent": "sequence",
         "opponent_decks": "top_winrate",
         "min_observed_wins": args.min_observed_wins,
         "top_n": args.top_n,
         "deck_count": len(deck_records),
+        "seed_schedule": list(seed_schedule),
+        "round_robin_opponents": True,
         "decks": deck_records,
     }
     _write_json(out_root / "manifest.json", manifest)
 
     all_deck_summaries: list[dict[str, Any]] = []
-    for agent in AGENTS:
+    for agent in agents:
         agent_summaries: list[dict[str, Any]] = []
         for deck in deck_records:
             deck_id = deck["id"]
@@ -160,15 +220,18 @@ def main() -> int:
                     "--agent-deck-id",
                     deck_id,
                     "--games",
-                    str(args.games),
+                    str(games),
                     "--workers",
                     str(args.workers),
                     "--out-dir",
                     str(out_dir),
                     "--planner-coverage-report",
                     "--disable-mlp",
+                    "--round-robin-opponents",
+                    "--seed-list",
+                    ",".join(str(seed) for seed in seed_schedule),
                 ]
-                print(f"run: {agent} deck={deck_id} games={args.games} workers={args.workers}", flush=True)
+                print(f"run: {agent} deck={deck_id} rounds={rounds} games={games} workers={args.workers}", flush=True)
                 subprocess.run(cmd, check=True)
             rows = _csv_rows(out_dir)
             summary = {
@@ -189,18 +252,18 @@ def main() -> int:
 
     by_agent = {
         agent: _aggregate_deck_summaries([row for row in all_deck_summaries if row["agent"] == agent])
-        for agent in AGENTS
+        for agent in agents
     }
     comparison = {
         "agents": by_agent,
         "pooled_win_rate_delta_sequence_minus_previous_best": (
             by_agent["sequence"]["pooled_win_rate"] - by_agent["sequence-starmie-froslass"]["pooled_win_rate"]
-            if all(by_agent.values())
+            if "sequence" in by_agent and "sequence-starmie-froslass" in by_agent and all(by_agent.values())
             else None
         ),
         "mean_deck_win_rate_delta_sequence_minus_previous_best": (
             by_agent["sequence"]["mean_deck_win_rate"] - by_agent["sequence-starmie-froslass"]["mean_deck_win_rate"]
-            if all(by_agent.values())
+            if "sequence" in by_agent and "sequence-starmie-froslass" in by_agent and all(by_agent.values())
             else None
         ),
     }

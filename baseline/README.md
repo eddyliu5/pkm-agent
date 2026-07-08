@@ -27,6 +27,14 @@ Run this suite before claiming an agent improvement:
 ./.venv/bin/python -m pokemon_agent.submission --output artifacts/baseline/current/submission.tar.gz
 ```
 
+Run the standardized top-deck sequence matrix before treating a sequence-policy change as strong. By default this evaluates `sequence` with each top observed-winrate deck against a round-robin `sequence` top-winrate opponent pool for 5 full rotations: 30 self decks x 150 games = 4500 total games.
+
+```bash
+./.venv/bin/python scripts/run_top_deck_sequence_compare.py
+```
+
+The top-deck runner uses fixed per-round seeds by default, starting with `42`, and caps the schedule at 30 rounds/seeds.
+
 For quick iteration, use 24 games per evaluation. For decision-making, use at least 100 games per matchup. For final candidate selection, prefer 300+ games per matchup when time allows.
 
 ## Baseline Principles
@@ -36,4 +44,3 @@ For quick iteration, use 24 games per evaluation. For decision-making, use at le
 - Prefer deck-db rotation over mirror-only results when estimating Kaggle movement.
 - Treat one short run as a signal, not proof. Repeat promising changes with more games.
 - Preserve raw JSONL and CSV outputs under `artifacts/baseline/<run-name>/`.
-
