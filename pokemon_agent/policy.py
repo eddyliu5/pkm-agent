@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+import importlib.util
 import json
+import os
 import random
 from pathlib import Path
 from typing import Any
@@ -152,6 +155,37 @@ class DeckSpecificHeuristicPolicy(LinearQPolicy):
         super().__init__(weights=weights, config=role_config)
 
 
+class RawAgentPolicy(Policy):
+    """Adapter for a Kaggle-style sample agent directory with main.py and deck.csv."""
+
+    def __init__(self, agent_dir: str | Path):
+        self.agent_dir = Path(agent_dir)
+        if not self.agent_dir.is_absolute():
+            self.agent_dir = PROJECT_ROOT / self.agent_dir
+        main_path = self.agent_dir / "main.py"
+        if not main_path.exists():
+            raise FileNotFoundError(f"Raw agent main.py not found: {main_path}")
+        module_name = f"_raw_agent_{abs(hash(str(main_path)))}"
+        spec = importlib.util.spec_from_file_location(module_name, main_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load raw agent module: {main_path}")
+        module = importlib.util.module_from_spec(spec)
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.agent_dir)
+            spec.loader.exec_module(module)
+        finally:
+            os.chdir(cwd)
+        agent = getattr(module, "agent", None)
+        if not callable(agent):
+            raise AttributeError(f"Raw agent module has no callable agent(): {main_path}")
+        self.agent = agent
+
+    def choose(self, obs: Any) -> list[int]:
+        selected = self.agent(asdict(obs))
+        return [int(index) for index in selected]
+
+
 class EpsilonGreedyPolicy(Policy):
     def __init__(self, policy: Policy, epsilon: float, seed: int | None = None):
         self.policy = policy
@@ -261,6 +295,8 @@ def make_policy(
                     rank = 1
             return DeckSpecificHeuristicPolicy(deck=deck, config=config, top_rank=rank)
         return DeckSpecificHeuristicPolicy(deck_id=payload, deck=deck, config=config)
+    if spec.startswith("raw-agent:"):
+        return RawAgentPolicy(spec.split(":", 1)[1])
     if spec == "sequence":
         cfg = config or load_config()
         return SequencePolicy(config=cfg, deck=deck or read_deck(config=cfg), seed=seed, **sequence_options)

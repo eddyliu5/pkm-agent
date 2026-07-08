@@ -953,6 +953,11 @@ def test_replay_pipeline_smoke() -> None:
         assert runtime_config["mlp_model_file"] == expected_mlp_name
 
 
+def test_raw_agent_policy_loads_sample() -> None:
+    policy = make_policy("raw-agent:sample/mega-lucario-v62")
+    assert policy.__class__.__name__ == "RawAgentPolicy"
+
+
 def test_top_replay_planner_candidate_coverage() -> None:
     replay_dir = Path("artifacts/replays/kaggle/pokemon-tcg-ai-battle")
     if not replay_dir.exists() or not any(replay_dir.glob("episode-*-replay.json")):
@@ -1005,6 +1010,7 @@ def main() -> None:
     test_hidden_sample_planning_diagnostics()
     test_sequence_policy_episode_smoke()
     test_replay_pipeline_smoke()
+    test_raw_agent_policy_loads_sample()
     test_top_replay_planner_candidate_coverage()
     print("smoke tests passed")
 

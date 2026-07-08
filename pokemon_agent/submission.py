@@ -13,6 +13,43 @@ from .features import default_weights
 from .sequence import default_clean_sequence_weights
 
 
+def build_raw_agent_submission(
+    agent_dir: str,
+    output: str = "artifacts/submission/submission.tar.gz",
+) -> Path:
+    output_path = Path(output)
+    if not output_path.is_absolute():
+        output_path = PROJECT_ROOT / output_path
+    source_dir = Path(agent_dir)
+    if not source_dir.is_absolute():
+        source_dir = PROJECT_ROOT / source_dir
+    main_path = source_dir / "main.py"
+    deck_path = source_dir / "deck.csv"
+    if not main_path.exists():
+        raise FileNotFoundError(f"Raw agent main.py not found: {main_path}")
+    if not deck_path.exists():
+        raise FileNotFoundError(f"Raw agent deck.csv not found: {deck_path}")
+
+    build_dir = output_path.parent / "build"
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(main_path, build_dir / "main.py")
+    for csv_path in source_dir.glob("*.csv"):
+        shutil.copy2(csv_path, build_dir / csv_path.name)
+    ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc")
+    shutil.copytree(cg_root() / "cg", build_dir / "cg", ignore=ignore_generated)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        output_path.unlink()
+    with tarfile.open(output_path, "w:gz") as tar:
+        for item in build_dir.iterdir():
+            tar.add(item, arcname=item.name)
+    print(output_path)
+    return output_path
+
+
 def build_submission(
     weights_path: str | None = None,
     mlp_model_path: str | None = None,
@@ -108,7 +145,14 @@ def main() -> None:
     parser.add_argument("--output", default="artifacts/submission/submission.tar.gz")
     parser.add_argument("--clean", action="store_true", help="Package the clean sequence evaluator runtime.")
     parser.add_argument("--deck-id", default=None, help="Package this deck_db deck id instead of the default deck.")
+    parser.add_argument("--raw-agent-dir", default=None, help="Package a Kaggle-style raw agent directory with main.py and deck.csv.")
     args = parser.parse_args()
+    if args.raw_agent_dir:
+        build_raw_agent_submission(
+            agent_dir=args.raw_agent_dir,
+            output=args.output,
+        )
+        return
     build_submission(
         weights_path=args.weights,
         mlp_model_path=args.mlp_model,
