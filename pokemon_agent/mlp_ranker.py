@@ -237,6 +237,23 @@ def _default_hidden_dim(input_dim: int) -> int:
     return 256
 
 
+def _resolve_hidden_dims(
+    input_dim: int,
+    *,
+    hidden_dims: list[int] | tuple[int, ...] | None = None,
+    hidden_dim: int | None = None,
+    hidden_dim2: int | None = None,
+) -> list[int]:
+    if hidden_dims is not None:
+        dims = [int(dim) for dim in hidden_dims if int(dim) > 0]
+        if not dims:
+            raise ValueError("hidden_dims must include at least one positive dimension")
+        return dims
+    first_dim = int(hidden_dim) if hidden_dim is not None and int(hidden_dim) > 0 else _default_hidden_dim(input_dim)
+    second_dim = int(hidden_dim2) if hidden_dim2 is not None and int(hidden_dim2) > 0 else max(16, first_dim // 2)
+    return [first_dim, second_dim]
+
+
 def torch_available() -> bool:
     try:
         import torch  # noqa: F401
@@ -409,15 +426,12 @@ class MLPSequenceRanker:
     ) -> "MLPSequenceRanker":
         rng = random.Random(seed)
         input_dim = len(feature_stats.names)
-        if hidden_dims is None:
-            if hidden_dim is None or hidden_dim <= 0:
-                hidden_dim = _default_hidden_dim(input_dim)
-            if hidden_dim2 is None or hidden_dim2 <= 0:
-                hidden_dim2 = max(16, int(hidden_dim) // 2)
-            hidden_dims = [int(hidden_dim), int(hidden_dim2)]
-        hidden_dims = [int(dim) for dim in hidden_dims if int(dim) > 0]
-        if not hidden_dims:
-            raise ValueError("At least one hidden dimension is required")
+        hidden_dims = _resolve_hidden_dims(
+            input_dim,
+            hidden_dims=hidden_dims,
+            hidden_dim=hidden_dim,
+            hidden_dim2=hidden_dim2,
+        )
         input_mean = [0.0 for _ in feature_stats.names] if normalization == "sparse" else feature_stats.mean
         hidden_layers: list[dict[str, Any]] = []
         previous_dim = input_dim
@@ -1350,6 +1364,7 @@ def pretrain_mlp_ranker_torch(
     out_dir: str = "artifacts/checkpoints/mlp_ranker",
     epochs: int = 3,
     lr: float = 0.001,
+    hidden_dims: list[int] | tuple[int, ...] | None = None,
     hidden_dim: int = 0,
     hidden_dim2: int = 0,
     max_features: int = 256,
@@ -1406,12 +1421,15 @@ def pretrain_mlp_ranker_torch(
             seed=seed,
             progress=progress,
         )
-    hidden_dim = int(hidden_dim) if int(hidden_dim) > 0 else _default_hidden_dim(len(stats.names))
-    hidden_dim2 = int(hidden_dim2) if int(hidden_dim2) > 0 else max(16, hidden_dim // 2)
-    template = MLPSequenceRanker.initialize(
-        feature_stats=stats,
+    resolved_hidden_dims = _resolve_hidden_dims(
+        len(stats.names),
+        hidden_dims=hidden_dims,
         hidden_dim=hidden_dim,
         hidden_dim2=hidden_dim2,
+    )
+    template = MLPSequenceRanker.initialize(
+        feature_stats=stats,
+        hidden_dims=resolved_hidden_dims,
         seed=seed,
         input_clip=input_clip,
         normalization=normalization,
@@ -1620,9 +1638,9 @@ def pretrain_mlp_ranker_torch(
             "examples": examples,
             "candidate_vectors_for_stats": stats.candidate_count,
             "feature_count": len(stats.names),
-            "hidden_dim": hidden_dim,
-            "hidden_dim2": hidden_dim2,
-            "hidden_dims": [hidden_dim, hidden_dim2],
+            "hidden_dim": resolved_hidden_dims[0],
+            "hidden_dim2": resolved_hidden_dims[1] if len(resolved_hidden_dims) > 1 else 0,
+            "hidden_dims": resolved_hidden_dims,
             "normalization": normalization,
             "average_loss": train_metrics["average_loss"],
             "top1_accuracy": train_metrics["top1_accuracy"],
@@ -1656,6 +1674,7 @@ def pretrain_mlp_ranker(
     out_dir: str = "artifacts/checkpoints/mlp_ranker",
     epochs: int = 3,
     lr: float = 0.001,
+    hidden_dims: list[int] | tuple[int, ...] | None = None,
     hidden_dim: int = 0,
     hidden_dim2: int = 0,
     max_features: int = 256,
@@ -1684,12 +1703,15 @@ def pretrain_mlp_ranker(
         seed=seed,
         progress=progress,
     )
-    hidden_dim = int(hidden_dim) if int(hidden_dim) > 0 else _default_hidden_dim(len(stats.names))
-    hidden_dim2 = int(hidden_dim2) if int(hidden_dim2) > 0 else max(16, hidden_dim // 2)
-    model = MLPSequenceRanker.initialize(
-        feature_stats=stats,
+    resolved_hidden_dims = _resolve_hidden_dims(
+        len(stats.names),
+        hidden_dims=hidden_dims,
         hidden_dim=hidden_dim,
         hidden_dim2=hidden_dim2,
+    )
+    model = MLPSequenceRanker.initialize(
+        feature_stats=stats,
+        hidden_dims=resolved_hidden_dims,
         seed=seed,
         input_clip=input_clip,
         normalization=normalization,
@@ -1764,9 +1786,9 @@ def pretrain_mlp_ranker(
             "examples": examples,
             "candidate_vectors_for_stats": stats.candidate_count,
             "feature_count": len(stats.names),
-            "hidden_dim": hidden_dim,
-            "hidden_dim2": hidden_dim2,
-            "hidden_dims": [hidden_dim, hidden_dim2],
+            "hidden_dim": resolved_hidden_dims[0],
+            "hidden_dim2": resolved_hidden_dims[1] if len(resolved_hidden_dims) > 1 else 0,
+            "hidden_dims": resolved_hidden_dims,
             "normalization": normalization,
             "average_loss": train_metrics["average_loss"],
             "top1_accuracy": train_metrics["top1_accuracy"],

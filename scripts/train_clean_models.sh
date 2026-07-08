@@ -44,6 +44,7 @@ SEQ_EPOCHS="${SEQ_EPOCHS:-5}"
 MLP_EPOCHS="${MLP_EPOCHS:-5}"
 HIDDEN_DIM="${HIDDEN_DIM:-0}"
 HIDDEN_DIM2="${HIDDEN_DIM2:-0}"
+HIDDEN_DIMS="${HIDDEN_DIMS:-}"
 MLP_MAX_FEATURES="${MLP_MAX_FEATURES:-512}"
 VALIDATION_FRACTION="${VALIDATION_FRACTION:-0.10}"
 FILTER_PASSIVE_END_LABELS="${FILTER_PASSIVE_END_LABELS:-1}"
@@ -509,6 +510,9 @@ if [[ "$SKIP_TRAIN" != "1" ]]; then
   if [[ -n "$MLP_CACHE_DIR" ]]; then
     mlp_cmd+=(--mlp-cache-dir "$MLP_CACHE_DIR")
   fi
+  if [[ -n "$HIDDEN_DIMS" ]]; then
+    mlp_cmd+=(--hidden-dims "$HIDDEN_DIMS")
+  fi
   if [[ "$MLP_PROGRESS" == "1" ]]; then
     mlp_cmd+=(--progress)
   fi
@@ -536,6 +540,7 @@ if [[ "$TRAIN_ONLY" == "1" ]]; then
   printf 'MLP backend:         %s\n' "$MLP_BACKEND"
   printf 'MLP device:          %s\n' "$MLP_DEVICE"
   printf 'MLP batch size:      %s\n' "$MLP_BATCH_SIZE"
+  printf 'MLP hidden dims:     %s\n' "${HIDDEN_DIMS:-${HIDDEN_DIM},${HIDDEN_DIM2}}"
   printf 'MLP cache examples:  %s\n' "$MLP_CACHE_EXAMPLES"
   printf 'MLP cache dir:       %s\n' "${MLP_CACHE_DIR:-rebuild}"
   printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"
@@ -637,6 +642,7 @@ printf 'MLP ranker:         %s\n' "${MLP_MODEL_PATH:-${MLP_OUT}/best.pt}"
 printf 'MLP backend:         %s\n' "$MLP_BACKEND"
 printf 'MLP device:          %s\n' "$MLP_DEVICE"
 printf 'MLP batch size:      %s\n' "$MLP_BATCH_SIZE"
+printf 'MLP hidden dims:     %s\n' "${HIDDEN_DIMS:-${HIDDEN_DIM},${HIDDEN_DIM2}}"
 printf 'MLP cache examples:  %s\n' "$MLP_CACHE_EXAMPLES"
 printf 'MLP cache dir:       %s\n' "${MLP_CACHE_DIR:-rebuild}"
 printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"

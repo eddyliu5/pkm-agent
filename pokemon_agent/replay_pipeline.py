@@ -79,6 +79,19 @@ def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
+def _parse_hidden_dims(value: str | None) -> list[int] | None:
+    if value is None or not str(value).strip():
+        return None
+    parts = str(value).replace("x", ",").replace("X", ",").split(",")
+    try:
+        dims = [int(part.strip()) for part in parts if part.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--hidden-dims must contain positive integers") from exc
+    if not dims or any(dim <= 0 for dim in dims):
+        raise argparse.ArgumentTypeError("--hidden-dims must contain positive integers")
+    return dims
+
+
 def _run_command(command: list[str], *, dry_run: bool = False) -> dict[str, Any]:
     if dry_run:
         return {"command": command, "returncode": None, "stdout": "", "stderr": "", "dry_run": True}
@@ -1885,6 +1898,7 @@ def main() -> None:
     pretrain_mlp.add_argument("--lr", type=float, default=0.001)
     pretrain_mlp.add_argument("--hidden-dim", type=int, default=0, help="First hidden layer width; 0 derives from input feature count.")
     pretrain_mlp.add_argument("--hidden-dim2", type=int, default=0, help="Second hidden layer width; 0 derives from hidden-dim.")
+    pretrain_mlp.add_argument("--hidden-dims", type=_parse_hidden_dims, default=None, help="Comma- or x-separated hidden layer widths, e.g. 192,96,48. Overrides --hidden-dim/--hidden-dim2.")
     pretrain_mlp.add_argument("--max-features", type=int, default=256)
     pretrain_mlp.add_argument("--min-feature-count", type=int, default=1)
     pretrain_mlp.add_argument("--max-examples", type=int, default=None)
@@ -2029,6 +2043,7 @@ def main() -> None:
                 out_dir=args.out_dir,
                 epochs=args.epochs,
                 lr=args.lr,
+                hidden_dims=args.hidden_dims,
                 hidden_dim=args.hidden_dim,
                 hidden_dim2=args.hidden_dim2,
                 max_features=args.max_features,
@@ -2055,6 +2070,7 @@ def main() -> None:
                 out_dir=args.out_dir,
                 epochs=args.epochs,
                 lr=args.lr,
+                hidden_dims=args.hidden_dims,
                 hidden_dim=args.hidden_dim,
                 hidden_dim2=args.hidden_dim2,
                 max_features=args.max_features,
