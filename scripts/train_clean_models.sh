@@ -5,12 +5,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # Full-from-scratch general training, trained-agent deck selection, package, submit, and baseline flow.
+# The MLP is still trained, but runtime defaults to auto policy selection. Auto uses the
+# safer sequence policy for deck sweep, then compares sequence vs MLP on selected-deck
+# baselines before packaging.
 #
 # Default run:
 #   ./scripts/train_clean_models.sh
 #
 # Pilot run without Kaggle submit:
-#   MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 FAST_DECK_SWEEP_GAMES=90 SKIP_SUBMIT=1 ./scripts/train_clean_models.sh
+#   MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 FAST_DECK_SWEEP_GAMES=90 MIN_DECK_SWEEP_GAMES_PER_DECK=1 SKIP_SUBMIT=1 ./scripts/train_clean_models.sh
+#
+# Retrain only the MLP from an existing raw label file:
+#   TRAIN_ONLY=1 SKIP_LABEL_GENERATION=1 SKIP_SEQUENCE_TRAIN=1 ./scripts/train_clean_models.sh
+# TRAIN_ONLY exits before deck sweep, baseline evaluation, packaging, and Kaggle submission.
 
 PYTHON="${PYTHON:-./.venv/bin/python}"
 INPUTS="${INPUTS:-artifacts/replays/kaggle}"
@@ -38,28 +45,52 @@ HIDDEN_DIM="${HIDDEN_DIM:-0}"
 HIDDEN_DIM2="${HIDDEN_DIM2:-0}"
 MLP_MAX_FEATURES="${MLP_MAX_FEATURES:-512}"
 VALIDATION_FRACTION="${VALIDATION_FRACTION:-0.10}"
+FILTER_PASSIVE_END_LABELS="${FILTER_PASSIVE_END_LABELS:-1}"
+PROGRESS="${PROGRESS:-1}"
+COMPACT_PROGRESS="${COMPACT_PROGRESS:-$PROGRESS}"
+MLP_PROGRESS="${MLP_PROGRESS:-$PROGRESS}"
 
-FAST_DECK_SWEEP_GAMES="${FAST_DECK_SWEEP_GAMES:-500}"
+FAST_DECK_SWEEP_GAMES="${FAST_DECK_SWEEP_GAMES:-600}"
 FAST_DECK_SWEEP_AGENT_DECKS="${FAST_DECK_SWEEP_AGENT_DECKS:-top_winrate}"
 FAST_DECK_SWEEP_OPPONENT_DECKS="${FAST_DECK_SWEEP_OPPONENT_DECKS:-top_winrate}"
 FAST_DECK_SWEEP_OUT="${FAST_DECK_SWEEP_OUT:-artifacts/baseline/${RUN_NAME}_${RUN_ID}_fast_deck_sweep}"
 BASELINE_EVAL_GAMES="${BASELINE_EVAL_GAMES:-100}"
 BASELINE_EVAL_OUT="${BASELINE_EVAL_OUT:-artifacts/baseline/${RUN_NAME}_${RUN_ID}_selected_deck}"
 EVAL_WORKERS="${EVAL_WORKERS:-1}"
+MIN_DECK_SWEEP_GAMES_PER_DECK="${MIN_DECK_SWEEP_GAMES_PER_DECK:-15}"
 
 SUBMISSION_DIR="${SUBMISSION_DIR:-artifacts/submission}"
 KAGGLE_COMPETITION="${KAGGLE_COMPETITION:-pokemon-tcg-ai-battle}"
 SKIP_TRAIN="${SKIP_TRAIN:-0}"
+SKIP_LABEL_GENERATION="${SKIP_LABEL_GENERATION:-0}"
+SKIP_COMPACT_LABELS="${SKIP_COMPACT_LABELS:-0}"
+SKIP_SEQUENCE_TRAIN="${SKIP_SEQUENCE_TRAIN:-0}"
+SKIP_MLP_TRAIN="${SKIP_MLP_TRAIN:-0}"
+TRAIN_ONLY="${TRAIN_ONLY:-0}"
 SKIP_DECK_SWEEP="${SKIP_DECK_SWEEP:-0}"
 SKIP_PACKAGE="${SKIP_PACKAGE:-0}"
 SKIP_SUBMIT="${SKIP_SUBMIT:-0}"
 SKIP_BASELINE="${SKIP_BASELINE:-0}"
 BEST_DECK_ID="${BEST_DECK_ID:-}"
+RUNTIME_POLICY="${RUNTIME_POLICY:-auto}"
+RUNTIME_POLICY_REQUESTED="$RUNTIME_POLICY"
+RUNTIME_LINEAR_WEIGHTS="${RUNTIME_LINEAR_WEIGHTS:-default}"
+ALLOW_UNSAFE_RUNTIME_WEIGHTS="${ALLOW_UNSAFE_RUNTIME_WEIGHTS:-0}"
+MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE="${MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE:-0.35}"
 MIN_HEURISTIC_WIN_RATE_FOR_SUBMIT="${MIN_HEURISTIC_WIN_RATE_FOR_SUBMIT:-0.50}"
 
 run() {
   printf '\n==> %s\n' "$*"
   "$@"
+}
+
+require_file() {
+  local path="$1"
+  local description="$2"
+  if [[ ! -s "$path" ]]; then
+    printf '%s is missing or empty: %s\n' "$description" "$path" >&2
+    exit 2
+  fi
 }
 
 find_kaggle() {
@@ -90,6 +121,7 @@ import sys
 from collections import defaultdict
 
 out_dir = sys.argv[1]
+min_games = int(sys.argv[2])
 rows = []
 for path in glob.glob(f"{out_dir}/eval_*.csv"):
     with open(path, newline="", encoding="utf-8") as fh:
@@ -111,18 +143,26 @@ for row in rows:
 if not stats:
     raise SystemExit("No agent deck stats found in fast sweep output")
 
+eligible = {deck_id: item for deck_id, item in stats.items() if item["games"] >= min_games}
+if not eligible:
+    counts = ", ".join(f"{deck_id}:{item['games']}" for deck_id, item in sorted(stats.items()))
+    raise SystemExit(
+        f"No agent deck has at least {min_games} fast-sweep games. "
+        f"Increase FAST_DECK_SWEEP_GAMES or lower MIN_DECK_SWEEP_GAMES_PER_DECK. Counts: {counts}"
+    )
+
 deck_id, item = max(
-    stats.items(),
+    eligible.items(),
     key=lambda pair: (
         pair[1]["wins"] / max(1, pair[1]["games"]),
-        -pair[1]["prize_diff"] / max(1, pair[1]["games"]),
+        pair[1]["prize_diff"] / max(1, pair[1]["games"]),
         pair[1]["games"],
         pair[0],
     ),
 )
 slug = re.sub(r"[^A-Za-z0-9_]+", "_", deck_id).strip("_").lower()
 print(f"{deck_id}\t{slug}\t{item['\''archetype'\'']}\t{item['\''wins'\'']}/{item['\''games'\'']}\t{item['\''prize_diff'\'']/max(1,item['\''games'\'']):.3f}")
-' "$FAST_DECK_SWEEP_OUT"
+' "$FAST_DECK_SWEEP_OUT" "$MIN_DECK_SWEEP_GAMES_PER_DECK"
 }
 
 latest_heuristic_win_rate() {
@@ -168,6 +208,200 @@ if actual < minimum:
 ' "$heuristic_win_rate" "$MIN_HEURISTIC_WIN_RATE_FOR_SUBMIT"
 }
 
+assert_package_baseline_gate() {
+  if [[ "$SKIP_BASELINE" == "1" || -z "$MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE" ]]; then
+    return
+  fi
+  local heuristic_win_rate
+  heuristic_win_rate="$(latest_heuristic_win_rate)"
+  "$PYTHON" -c '
+import sys
+
+actual = float(sys.argv[1])
+minimum = float(sys.argv[2])
+if actual < minimum:
+    raise SystemExit(
+        f"Selected deck heuristic mirror win_rate={actual:.3f} is below "
+        f"MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE={minimum:.3f}; refusing to package. "
+        "Set MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE= to disable this gate."
+    )
+' "$heuristic_win_rate" "$MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE"
+}
+
+resolve_runtime_weights() {
+  RUNTIME_WEIGHTS_PATH=""
+  case "$RUNTIME_LINEAR_WEIGHTS" in
+    ""|"default"|"none")
+      return
+      ;;
+    "trained")
+      RUNTIME_WEIGHTS_PATH="${SEQ_OUT}/best.json"
+      ;;
+    *)
+      RUNTIME_WEIGHTS_PATH="$RUNTIME_LINEAR_WEIGHTS"
+      ;;
+  esac
+}
+
+assert_runtime_weight_safety() {
+  if [[ -z "${RUNTIME_WEIGHTS_PATH:-}" || "$ALLOW_UNSAFE_RUNTIME_WEIGHTS" == "1" ]]; then
+    return
+  fi
+  "$PYTHON" -c '
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    payload = json.load(fh)
+weights = payload.get("weights", payload)
+checks = {
+    "attach_energy": 0.0,
+    "attach_to_main_line": 0.0,
+    "end_with_useful_action": 0.0,
+    "play_pokemon_to_avoid_empty_board_loss": 0.0,
+    "seq_energy_delta": 0.0,
+    "seq_bench_delta": 0.0,
+}
+problems = []
+for key, threshold in checks.items():
+    value = float(weights.get(key, 0.0))
+    if key == "end_with_useful_action":
+        if value >= threshold:
+            problems.append(f"{key}={value:.3f} should be negative")
+    elif value <= threshold:
+        problems.append(f"{key}={value:.3f} should be positive")
+if problems:
+    raise SystemExit(
+        "Runtime linear weights failed safety checks: "
+        + "; ".join(problems)
+        + ". Use RUNTIME_LINEAR_WEIGHTS=default or ALLOW_UNSAFE_RUNTIME_WEIGHTS=1."
+    )
+' "$RUNTIME_WEIGHTS_PATH"
+}
+
+configure_runtime_policy() {
+  local policy="$1"
+  case "$policy" in
+    "sequence")
+      if [[ -n "${RUNTIME_WEIGHTS_PATH:-}" ]]; then
+        EVAL_AGENT="sequence:${RUNTIME_WEIGHTS_PATH}"
+      else
+        EVAL_AGENT="sequence"
+      fi
+      ;;
+    "mlp")
+      if [[ -n "${RUNTIME_WEIGHTS_PATH:-}" ]]; then
+        EVAL_AGENT="sequence-mlp:${MLP_OUT}/best.json,${RUNTIME_WEIGHTS_PATH}"
+      else
+        EVAL_AGENT="sequence-mlp:${MLP_OUT}/best.json"
+      fi
+      ;;
+    *)
+      printf 'Unknown runtime policy: %s. Use auto, sequence, or mlp.\n' "$policy" >&2
+      exit 2
+      ;;
+  esac
+}
+
+run_selected_deck_baselines() {
+  local out_dir="$1"
+  run "$PYTHON" -m pokemon_agent.eval \
+    --agent "$EVAL_AGENT" \
+    --agent-deck-id "$BEST_DECK_ID" \
+    --opponent heuristic \
+    --games "$BASELINE_EVAL_GAMES" \
+    --workers "$EVAL_WORKERS" \
+    --out-dir "$out_dir"
+
+  run "$PYTHON" -m pokemon_agent.eval \
+    --agent "$EVAL_AGENT" \
+    --agent-deck-id "$BEST_DECK_ID" \
+    --opponent random \
+    --opponent-decks deck_db \
+    --games "$BASELINE_EVAL_GAMES" \
+    --workers "$EVAL_WORKERS" \
+    --out-dir "$out_dir"
+
+  run "$PYTHON" -m pokemon_agent.eval \
+    --agent "$EVAL_AGENT" \
+    --agent-deck-id "$BEST_DECK_ID" \
+    --opponent deck-heuristic \
+    --opponent-decks top_winrate \
+    --games "$BASELINE_EVAL_GAMES" \
+    --workers "$EVAL_WORKERS" \
+    --out-dir "$out_dir"
+}
+
+select_best_runtime_policy() {
+  "$PYTHON" -c '
+import csv
+import glob
+import os
+import sys
+
+choices = [("sequence", sys.argv[1]), ("mlp", sys.argv[2])]
+
+def opponent_from_path(path: str) -> str:
+    name = os.path.basename(path)
+    if "_vs_deck-heuristic_" in name:
+        return "deck-heuristic"
+    if "_vs_heuristic_" in name:
+        return "heuristic"
+    if "_vs_random_" in name:
+        return "random"
+    return "unknown"
+
+def summarize(out_dir: str) -> dict[str, float]:
+    result: dict[str, float] = {
+        "deck-heuristic_win_rate": -1.0,
+        "heuristic_win_rate": -1.0,
+        "random_win_rate": -1.0,
+        "avg_prize_diff": -99.0,
+    }
+    prize_diffs = []
+    for path in glob.glob(f"{out_dir}/eval_*.csv"):
+        opponent = opponent_from_path(path)
+        rows = []
+        with open(path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        if not rows:
+            continue
+        wins = sum(1 for row in rows if row.get("result") == "win")
+        result[f"{opponent}_win_rate"] = wins / len(rows)
+        prize_diffs.extend(float(row.get("prize_diff") or 0.0) for row in rows)
+    if prize_diffs:
+        result["avg_prize_diff"] = sum(prize_diffs) / len(prize_diffs)
+    return result
+
+ranked = []
+for policy, out_dir in choices:
+    summary = summarize(out_dir)
+    score = (
+        summary["deck-heuristic_win_rate"],
+        summary["heuristic_win_rate"],
+        summary["random_win_rate"],
+        summary["avg_prize_diff"],
+        1.0 if policy == "sequence" else 0.0,
+    )
+    ranked.append((score, policy, out_dir, summary))
+
+ranked.sort(reverse=True)
+_score, policy, out_dir, summary = ranked[0]
+deck_heuristic_wr = summary["deck-heuristic_win_rate"]
+heuristic_wr = summary["heuristic_win_rate"]
+random_wr = summary["random_win_rate"]
+avg_prize_diff = summary["avg_prize_diff"]
+record = (
+    f"deck-heuristic={deck_heuristic_wr:.3f},"
+    f"heuristic={heuristic_wr:.3f},"
+    f"random={random_wr:.3f},"
+    f"avg_prize_diff={avg_prize_diff:.3f}"
+)
+print(f"{policy}\t{record}\t{out_dir}")
+' "$1" "$2"
+}
+
 mkdir -p \
   "$(dirname "$LABELS")" \
   "$(dirname "$COMPACT_LABELS")" \
@@ -197,17 +431,42 @@ if [[ "$SKIP_TRAIN" != "1" ]]; then
   if [[ -n "$MAX_EXAMPLES" ]]; then
     label_cmd+=(--max-examples "$MAX_EXAMPLES")
   fi
-  run "${label_cmd[@]}"
+  if [[ "$SKIP_LABEL_GENERATION" != "1" ]]; then
+    run "${label_cmd[@]}"
+  else
+    require_file "$LABELS" "Existing replay label file"
+    printf '\n==> Skipping replay label generation; using %s\n' "$LABELS"
+  fi
 
-  run "$PYTHON" -m pokemon_agent.replay_pipeline compact-labels \
-    --labels "$LABELS" \
-    --output "$COMPACT_LABELS" \
+  compact_cmd=(
+    "$PYTHON" -m pokemon_agent.replay_pipeline compact-labels
+    --labels "$LABELS"
+    --output "$COMPACT_LABELS"
     --max-candidates "$COMPACT_MAX_CANDIDATES"
+  )
+  if [[ "$FILTER_PASSIVE_END_LABELS" == "1" ]]; then
+    compact_cmd+=(--exclude-passive-end-labels)
+  fi
+  if [[ "$COMPACT_PROGRESS" == "1" ]]; then
+    compact_cmd+=(--progress)
+  fi
+  if [[ "$SKIP_COMPACT_LABELS" != "1" ]]; then
+    require_file "$LABELS" "Replay label file"
+    run "${compact_cmd[@]}"
+  else
+    require_file "$COMPACT_LABELS" "Existing compact MLP label file"
+    printf '\n==> Skipping compact label generation; using %s\n' "$COMPACT_LABELS"
+  fi
 
-  run "$PYTHON" -m pokemon_agent.replay_pipeline pretrain \
-    --labels "$LABELS" \
-    --out-dir "$SEQ_OUT" \
-    --epochs "$SEQ_EPOCHS"
+  if [[ "$SKIP_SEQUENCE_TRAIN" != "1" ]]; then
+    require_file "$LABELS" "Replay label file"
+    run "$PYTHON" -m pokemon_agent.replay_pipeline pretrain \
+      --labels "$LABELS" \
+      --out-dir "$SEQ_OUT" \
+      --epochs "$SEQ_EPOCHS"
+  else
+    printf '\n==> Skipping sequence linear training\n'
+  fi
 
   mlp_cmd=(
     "$PYTHON" -m pokemon_agent.replay_pipeline pretrain-mlp
@@ -220,10 +479,42 @@ if [[ "$SKIP_TRAIN" != "1" ]]; then
     --feature-schema-version full
     --validation-fraction "$VALIDATION_FRACTION"
   )
-  run "${mlp_cmd[@]}"
+  if [[ "$MLP_PROGRESS" == "1" ]]; then
+    mlp_cmd+=(--progress)
+  fi
+  if [[ "$SKIP_MLP_TRAIN" != "1" ]]; then
+    require_file "$COMPACT_LABELS" "Compact MLP label file"
+    run "${mlp_cmd[@]}"
+  else
+    require_file "${MLP_OUT}/best.json" "Existing MLP checkpoint"
+    printf '\n==> Skipping MLP training; using %s\n' "${MLP_OUT}/best.json"
+  fi
 fi
 
-EVAL_AGENT="sequence-mlp:${MLP_OUT}/best.json,${SEQ_OUT}/best.json"
+if [[ "$TRAIN_ONLY" == "1" ]]; then
+  printf '\nTraining flow complete.\n'
+  printf 'General run:        %s\n' "$RUN_NAME"
+  printf 'Replay labels:      %s\n' "$LABELS"
+  printf 'Compact labels:     %s\n' "$COMPACT_LABELS"
+  printf 'Sequence weights:   %s\n' "${SEQ_OUT}/best.json"
+  printf 'MLP ranker:         %s\n' "${MLP_OUT}/best.json"
+  printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"
+  printf 'Skipped label generation: %s\n' "$SKIP_LABEL_GENERATION"
+  printf 'Skipped compact labels: %s\n' "$SKIP_COMPACT_LABELS"
+  printf 'Skipped sequence training: %s\n' "$SKIP_SEQUENCE_TRAIN"
+  printf 'Skipped MLP training: %s\n' "$SKIP_MLP_TRAIN"
+  exit 0
+fi
+
+resolve_runtime_weights
+assert_runtime_weight_safety
+if [[ "$RUNTIME_POLICY_REQUESTED" == "auto" ]]; then
+  RUNTIME_POLICY="sequence"
+  configure_runtime_policy "$RUNTIME_POLICY"
+else
+  RUNTIME_POLICY="$RUNTIME_POLICY_REQUESTED"
+  configure_runtime_policy "$RUNTIME_POLICY"
+fi
 
 if [[ "$SKIP_DECK_SWEEP" != "1" && -z "$BEST_DECK_ID" ]]; then
   run "$PYTHON" -m pokemon_agent.eval \
@@ -246,46 +537,48 @@ else
   BEST_DECK_PRIZE_DIFF="manual"
 fi
 
-MODEL_NAME="full_from_scratch_${BEST_DECK_SLUG}"
+RUNTIME_POLICY_RECORD="manual"
+if [[ "$RUNTIME_POLICY_REQUESTED" == "auto" && "$SKIP_BASELINE" != "1" ]]; then
+  AUTO_BASELINE_ROOT="$BASELINE_EVAL_OUT"
+  SEQUENCE_BASELINE_OUT="${AUTO_BASELINE_ROOT}/runtime_sequence"
+  MLP_BASELINE_OUT="${AUTO_BASELINE_ROOT}/runtime_mlp"
+
+  RUNTIME_POLICY="sequence"
+  configure_runtime_policy "$RUNTIME_POLICY"
+  run_selected_deck_baselines "$SEQUENCE_BASELINE_OUT"
+
+  RUNTIME_POLICY="mlp"
+  configure_runtime_policy "$RUNTIME_POLICY"
+  run_selected_deck_baselines "$MLP_BASELINE_OUT"
+
+  RUNTIME_POLICY_ROW="$(select_best_runtime_policy "$SEQUENCE_BASELINE_OUT" "$MLP_BASELINE_OUT")"
+  IFS=$'\t' read -r RUNTIME_POLICY RUNTIME_POLICY_RECORD BASELINE_EVAL_OUT <<< "$RUNTIME_POLICY_ROW"
+  configure_runtime_policy "$RUNTIME_POLICY"
+elif [[ "$RUNTIME_POLICY_REQUESTED" == "auto" ]]; then
+  RUNTIME_POLICY="sequence"
+  RUNTIME_POLICY_RECORD="auto_without_baselines:sequence"
+  configure_runtime_policy "$RUNTIME_POLICY"
+elif [[ "$SKIP_BASELINE" != "1" ]]; then
+  run_selected_deck_baselines "$BASELINE_EVAL_OUT"
+fi
+
+MODEL_NAME="full_from_scratch_${RUNTIME_POLICY}_${BEST_DECK_SLUG}"
 SUBMISSION="${SUBMISSION:-${SUBMISSION_DIR}/${MODEL_NAME}.tar.gz}"
 KAGGLE_MESSAGE="${KAGGLE_MESSAGE:-$MODEL_NAME}"
 
-if [[ "$SKIP_BASELINE" != "1" ]]; then
-  run "$PYTHON" -m pokemon_agent.eval \
-    --agent "$EVAL_AGENT" \
-    --agent-deck-id "$BEST_DECK_ID" \
-    --opponent heuristic \
-    --games "$BASELINE_EVAL_GAMES" \
-    --workers "$EVAL_WORKERS" \
-    --out-dir "$BASELINE_EVAL_OUT"
-
-  run "$PYTHON" -m pokemon_agent.eval \
-    --agent "$EVAL_AGENT" \
-    --agent-deck-id "$BEST_DECK_ID" \
-    --opponent random \
-    --opponent-decks deck_db \
-    --games "$BASELINE_EVAL_GAMES" \
-    --workers "$EVAL_WORKERS" \
-    --out-dir "$BASELINE_EVAL_OUT"
-
-  run "$PYTHON" -m pokemon_agent.eval \
-    --agent "$EVAL_AGENT" \
-    --agent-deck-id "$BEST_DECK_ID" \
-    --opponent deck-heuristic \
-    --opponent-decks top_winrate \
-    --games "$BASELINE_EVAL_GAMES" \
-    --workers "$EVAL_WORKERS" \
-    --out-dir "$BASELINE_EVAL_OUT"
-fi
-
+assert_package_baseline_gate
 assert_submit_baseline_gate
 
 if [[ "$SKIP_PACKAGE" != "1" ]]; then
-  run "$PYTHON" -m pokemon_agent.submission \
-    --weights "${SEQ_OUT}/best.json" \
-    --mlp-model "${MLP_OUT}/best.json" \
-    --deck-id "$BEST_DECK_ID" \
-    --output "$SUBMISSION"
+  submission_cmd=("$PYTHON" -m pokemon_agent.submission)
+  if [[ -n "${RUNTIME_WEIGHTS_PATH:-}" ]]; then
+    submission_cmd+=(--weights "$RUNTIME_WEIGHTS_PATH")
+  fi
+  if [[ "$RUNTIME_POLICY" == "mlp" ]]; then
+    submission_cmd+=(--mlp-model "${MLP_OUT}/best.json")
+  fi
+  submission_cmd+=(--deck-id "$BEST_DECK_ID" --output "$SUBMISSION")
+  run "${submission_cmd[@]}"
 fi
 
 if [[ "$SKIP_SUBMIT" != "1" ]]; then
@@ -300,12 +593,19 @@ printf '\nFull-from-scratch flow complete.\n'
 printf 'General run:        %s\n' "$RUN_NAME"
 printf 'Sequence weights:   %s\n' "${SEQ_OUT}/best.json"
 printf 'MLP ranker:         %s\n' "${MLP_OUT}/best.json"
+printf 'Filter passive end labels: %s\n' "$FILTER_PASSIVE_END_LABELS"
+printf 'Requested runtime policy: %s\n' "$RUNTIME_POLICY_REQUESTED"
+printf 'Runtime policy:     %s\n' "$RUNTIME_POLICY"
+printf 'Runtime policy record: %s\n' "$RUNTIME_POLICY_RECORD"
+printf 'Runtime linear weights: %s\n' "${RUNTIME_WEIGHTS_PATH:-default}"
 printf 'Fast trained-agent deck sweep: %s\n' "$FAST_DECK_SWEEP_OUT"
 printf 'Fast sweep pools:   self=%s opponent=%s\n' "$FAST_DECK_SWEEP_AGENT_DECKS" "$FAST_DECK_SWEEP_OPPONENT_DECKS"
+printf 'Fast sweep min games/deck: %s\n' "$MIN_DECK_SWEEP_GAMES_PER_DECK"
 printf 'Eval workers:       %s\n' "$EVAL_WORKERS"
 printf 'Best deck:          %s (%s, %s, avg_prize_diff=%s)\n' "$BEST_DECK_ID" "$BEST_DECK_ARCHETYPE" "$BEST_DECK_RECORD" "$BEST_DECK_PRIZE_DIFF"
 printf 'Model name:         %s\n' "$MODEL_NAME"
 printf 'Submission:         %s\n' "$SUBMISSION"
 printf 'Kaggle message:     %s\n' "$KAGGLE_MESSAGE"
 printf 'Regular baselines:  %s\n' "$BASELINE_EVAL_OUT"
+printf 'Package heuristic gate: min_win_rate=%s\n' "${MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE:-disabled}"
 printf 'Submit heuristic gate: min_win_rate=%s\n' "${MIN_HEURISTIC_WIN_RATE_FOR_SUBMIT:-disabled}"

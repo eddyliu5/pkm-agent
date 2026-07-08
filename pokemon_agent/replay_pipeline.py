@@ -24,8 +24,9 @@ from .deck_db import deck_counts, deck_heuristic_config, expand_deck, iter_decks
 from .decision_engine import DecisionEngine
 from .engine import EpisodeResult
 from .features import combine_feature_dicts, extract_action_features, score_features
-from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker
+from .mlp_ranker import DEFAULT_EXCLUDED_FEATURES, MLPSequenceRanker, pretrain_mlp_ranker
 from .policy import RandomPolicy, load_weights
+from .progress import progress_iter
 from .reward import transition_reward
 from .sequence import SequenceSearchConfig, default_clean_sequence_weights, default_sequence_weights
 from .state import build_agent_state
@@ -976,6 +977,68 @@ def _label_records(path: str | Path) -> Iterable[dict[str, Any]]:
                 yield json.loads(line)
 
 
+def _candidate_features(candidate: dict[str, Any]) -> dict[str, Any]:
+    features = candidate.get("features") if isinstance(candidate, dict) else {}
+    return features if isinstance(features, dict) else {}
+
+
+def _candidate_labels(candidate: dict[str, Any]) -> tuple[str, ...]:
+    labels = candidate.get("labels") if isinstance(candidate, dict) else ()
+    if not isinstance(labels, (list, tuple)):
+        return ()
+    return tuple(str(label) for label in labels)
+
+
+def _candidate_first_action_is_end(candidate: dict[str, Any]) -> bool:
+    labels = _candidate_labels(candidate)
+    if labels:
+        return labels[0] == "end turn"
+    return False
+
+
+def _candidate_has_useful_non_end_action(candidate: dict[str, Any]) -> bool:
+    if _candidate_first_action_is_end(candidate):
+        return False
+    features = _candidate_features(candidate)
+    useful_keys = (
+        "attach_energy",
+        "attach_to_main_line",
+        "attach_to_backup",
+        "evolve",
+        "evolve_key",
+        "evolve_main_attacker",
+        "play_pokemon",
+        "play_main_line",
+        "play_setup_basic",
+        "play_pokemon_to_avoid_empty_board_loss",
+        "play_pokemon_behind_low_active",
+        "play_pokemon_to_stabilize_board",
+        "play_search",
+        "play_draw",
+        "attack_takes_ko",
+        "attack_wins_game",
+        "seq_my_prizes_gained",
+        "seq_energy_delta",
+        "seq_bench_delta",
+    )
+    return any(float(features.get(key, 0.0) or 0.0) > 0.0 for key in useful_keys)
+
+
+def _is_passive_end_label(label_index: int, candidates: list[Any]) -> bool:
+    if label_index < 0 or label_index >= len(candidates):
+        return False
+    label_candidate = candidates[label_index]
+    if not isinstance(label_candidate, dict) or not _candidate_first_action_is_end(label_candidate):
+        return False
+    label_features = _candidate_features(label_candidate)
+    if float(label_features.get("end_with_useful_action", 0.0) or 0.0) > 0.0:
+        return True
+    return any(
+        isinstance(candidate, dict) and index != label_index and _candidate_has_useful_non_end_action(candidate)
+        for index, candidate in enumerate(candidates)
+    )
+
+
 def compact_label_dataset(
     labels_path: str | Path,
     *,
@@ -984,6 +1047,8 @@ def compact_label_dataset(
     keep_candidate_debug: bool = False,
     max_candidates: int | None = None,
     exclude_label_index_zero: bool = False,
+    exclude_passive_end_labels: bool = False,
+    progress: bool = False,
 ) -> dict[str, Any]:
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -995,12 +1060,15 @@ def compact_label_dataset(
         "matched_records": 0,
         "skipped_unmatched": 0,
         "skipped_label_index_zero": 0,
+        "skipped_passive_end_label": 0,
         "candidate_count": 0,
         "max_candidates": max_candidates,
         "exclude_label_index_zero": exclude_label_index_zero,
+        "exclude_passive_end_labels": exclude_passive_end_labels,
     }
     with output_path.open("w", encoding="utf-8") as fh:
-        for record in _label_records(labels_path):
+        records = progress_iter(_label_records(labels_path), desc="compact labels", unit="rec", enabled=progress)
+        for record in records:
             stats["input_records"] += 1
             label_index = int(record.get("label_index", -1))
             candidates = record.get("candidates") or []
@@ -1015,6 +1083,9 @@ def compact_label_dataset(
                 continue
             if exclude_label_index_zero and label_index == 0:
                 stats["skipped_label_index_zero"] += 1
+                continue
+            if exclude_passive_end_labels and _is_passive_end_label(label_index, candidates):
+                stats["skipped_passive_end_label"] += 1
                 continue
             if max_candidates is not None and max_candidates > 0 and len(candidates) > max_candidates:
                 if label_index < max_candidates:
@@ -1798,6 +1869,8 @@ def main() -> None:
     compact_labels.add_argument("--keep-candidate-debug", action="store_true")
     compact_labels.add_argument("--max-candidates", type=int, default=None)
     compact_labels.add_argument("--exclude-label-index-zero", action="store_true")
+    compact_labels.add_argument("--exclude-passive-end-labels", action="store_true", help="Drop replay labels that choose end turn while useful non-end actions are available.")
+    compact_labels.add_argument("--progress", action="store_true", help="Show compact-label progress on stderr.")
 
     pretrain_mlp = sub.add_parser("pretrain-mlp", help="Supervised pretrain a tiny MLP sequence ranker from labels.")
     pretrain_mlp.add_argument("--labels", required=True)
@@ -1821,7 +1894,8 @@ def main() -> None:
         default="full",
     )
     pretrain_mlp.add_argument("--validation-fraction", type=float, default=0.10)
-    pretrain_mlp.add_argument("--include-linear-score", action="store_true", help="Allow linear_score as an MLP input feature. Default excludes it for MLP-only ranking.")
+    pretrain_mlp.add_argument("--include-linear-score", action="store_true", help="Allow linear_score as an MLP input feature. mlp_score remains excluded as a diagnostic leakage feature.")
+    pretrain_mlp.add_argument("--progress", action="store_true", help="Show MLP training progress on stderr.")
 
     rl = sub.add_parser("self-play", help="Fine-tune sequence weights with self-play returns.")
     rl.add_argument("--games", type=int, default=500)
@@ -1930,6 +2004,8 @@ def main() -> None:
             keep_candidate_debug=args.keep_candidate_debug,
             max_candidates=args.max_candidates,
             exclude_label_index_zero=args.exclude_label_index_zero,
+            exclude_passive_end_labels=args.exclude_passive_end_labels,
+            progress=args.progress,
         )
     elif args.cmd == "pretrain-mlp":
         summary = pretrain_mlp_ranker(
@@ -1950,7 +2026,8 @@ def main() -> None:
             normalization=args.normalization,
             feature_schema_version=args.feature_schema_version,
             validation_fraction=args.validation_fraction,
-            exclude_features=() if args.include_linear_score else ("linear_score",),
+            exclude_features=("mlp_score",) if args.include_linear_score else DEFAULT_EXCLUDED_FEATURES,
+            progress=args.progress,
         )
         print(json.dumps(summary, indent=2))
     elif args.cmd == "self-play":

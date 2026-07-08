@@ -12,13 +12,21 @@ These are valid `--agent` specs for the current evaluator.
 | `heuristic` | Simple feature-based policy. | Checks whether a change beats static action scoring without sequence search. |
 | `deck-heuristic` | Static heuristic with roles derived from the exact deck it pilots. | Stronger non-search opponent for top-deck matchup checks. |
 | `deck-heuristic:<deck_id>` | Static heuristic with roles derived from a specific `data/deck_db/decks.json` list. | Reproduce a known archetype or replay-derived deck baseline. |
-| `sequence` | Current default production baseline. | Main baseline for regressions and submissions. |
+| `sequence` | Current default production baseline. | Main baseline for regressions and submissions. The training script's `RUNTIME_POLICY=auto` mode packages this unless an MLP candidate beats it locally. |
 | `sequence-starmie-froslass` | Saved Starmie/Froslass sequence submission weights from `artifacts/submission/sequence_starmie_froslass_submission.tar.gz`. | Regression gate against the current best Kaggle-scoring local artifact. |
 | `sequence:<weights.json>` | Sequence search with learned linear weights. | Unnecessary for the current improvement path; keep only as an ablation/debug baseline. |
-| `sequence-mlp:<mlp.json>` | Sequence search with an MLP ranker. | Compare MLP checkpoints against default sequence and learned-linear variants. |
-| `sequence-mlp:<mlp.json>,<weights.json>` | Linear weights for search/fallback plus MLP-only final ranking. | Main full-schema trained checkpoint shape; final ranking defaults to `linear_score_weight=0.0`, `mlp_score_weight=1.0`. |
+| `sequence-mlp:<mlp.json>` | Sequence search with an MLP ranker. | Compare MLP checkpoints against default sequence and learned-linear variants before packaging. |
+| `sequence-mlp:<mlp.json>,<weights.json>` | Linear weights for search/fallback plus MLP-only final ranking. | Ablation only. Replay-trained linear weights must pass safety checks before they are used at runtime. |
 | `sequence-clean` | Clean evaluator path without direct probability/value/resource/threat/card-attention final scoring. | Architecture experiments and clean scoring regressions. |
 | `sequence-clean-mlp:<mlp.json>,<weights.json>` | Clean evaluator plus linear search weights and MLP-only final ranking. | Clean-schema ablation testing. |
+
+For MLP retrains after label or architecture fixes, rebuild the compact MLP label file from raw labels instead of reusing stale compact labels:
+
+```bash
+TRAIN_ONLY=1 SKIP_LABEL_GENERATION=1 SKIP_SEQUENCE_TRAIN=1 ./scripts/train_clean_models.sh
+```
+
+`TRAIN_ONLY=1` stops before deck sweep, packaging, and submission.
 
 ## Opponent Baselines
 
@@ -46,6 +54,8 @@ Use these gates when deciding whether a change is ready for more expensive testi
 | Random mirror | Candidate win rate should not be below current `sequence` by more than 2 percentage points on the same game count. |
 | Deck-db rotation | Candidate should improve or match the current `sequence` proxy contribution. This gate matters more than random mirror. |
 | Heuristic mirror | Candidate should improve or match current `sequence`, unless the experiment intentionally trades mirror performance for deck-db robustness. |
+| Package gate | `scripts/train_clean_models.sh` refuses to package when the selected runtime's heuristic mirror win rate is below `MIN_HEURISTIC_WIN_RATE_FOR_PACKAGE`. |
+| Runtime weights | Runtime linear weights must keep setup/action-safety signs sane unless `ALLOW_UNSAFE_RUNTIME_WEIGHTS=1` is explicitly set. |
 
 ## Recommended Comparison Matrix
 

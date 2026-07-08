@@ -15,7 +15,9 @@ from pathlib import Path
 from .belief import PrizeTracker
 from .actions import ActionView, legal_actions, sanitize_selection
 from .config import load_config, read_deck
+from .acting.guardrails import FallbackGuardrail
 from .decision_engine import DecisionEngine
+from .decision_types import ScoreBreakdown, ScoredCandidate
 from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_decks, load_deck_db, rank_decks_by_observed_cards, validate_deck
 from .engine import run_episode
 from .eval import _opponent_deck_pool
@@ -370,6 +372,140 @@ def test_empty_board_safety_features_prefer_benching_basic() -> None:
     weights = default_weights()
     assert score_features(play_features, weights) > score_features(attack_features, weights)
     assert score_features(play_features, weights) > score_features(end_features, weights)
+
+
+def _fake_scored_candidate(
+    selected: list[int],
+    *,
+    score: float,
+    linear: float,
+    mlp: float | None = None,
+    features: dict[str, float] | None = None,
+) -> ScoredCandidate:
+    return ScoredCandidate(
+        candidate=SimpleNamespace(first_selection=selected, steps=()),
+        features=features or {},
+        score=score,
+        components=ScoreBreakdown(linear=linear, mlp=mlp),
+    )
+
+
+def test_fallback_guardrail_does_not_apply_linear_margin_to_mlp_scores() -> None:
+    guardrail = FallbackGuardrail()
+    chosen = _fake_scored_candidate([0], score=11.0, linear=4079.0, mlp=11.0)
+    fallback = _fake_scored_candidate(
+        [26],
+        score=6.8,
+        linear=3671.0,
+        mlp=6.8,
+        features={"end_turn": 1.0, "end_with_useful_action": 1.0},
+    )
+
+    use_fallback, reason = guardrail.should_use_fallback(chosen, [chosen, fallback], [26])
+
+    assert not use_fallback
+    assert reason is None
+
+
+def test_fallback_guardrail_can_still_use_strong_linear_fallback_with_mlp() -> None:
+    guardrail = FallbackGuardrail()
+    chosen = _fake_scored_candidate([0], score=11.0, linear=1200.0, mlp=11.0)
+    fallback = _fake_scored_candidate([4], score=9.5, linear=1600.0, mlp=9.5)
+
+    use_fallback, reason = guardrail.should_use_fallback(chosen, [chosen, fallback], [4])
+
+    assert use_fallback
+    assert reason == "fallback_linear_margin_guardrail"
+
+
+def test_fallback_guardrail_respects_large_mlp_preference() -> None:
+    guardrail = FallbackGuardrail()
+    chosen = _fake_scored_candidate([0], score=11.0, linear=1200.0, mlp=11.0)
+    fallback = _fake_scored_candidate(
+        [26],
+        score=8.0,
+        linear=1600.0,
+        mlp=8.0,
+        features={"end_turn": 1.0, "end_with_useful_action": 1.0},
+    )
+
+    use_fallback, reason = guardrail.should_use_fallback(chosen, [chosen, fallback], [26])
+
+    assert not use_fallback
+    assert reason is None
+
+
+def test_compact_label_dataset_filters_passive_end_labels() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        labels_path = tmp_path / "labels.jsonl"
+        records = [
+            {
+                "label_index": 0,
+                "matched": True,
+                "candidates": [
+                    {
+                        "selected": [9],
+                        "labels": ["end turn"],
+                        "features": {"end_turn": 1.0, "end_with_useful_action": 1.0},
+                    },
+                    {
+                        "selected": [2],
+                        "labels": ["attach Basic Energy to active"],
+                        "features": {"attach_energy": 1.0, "attach_to_main_line": 1.0},
+                    },
+                ],
+            },
+            {
+                "label_index": 0,
+                "matched": True,
+                "candidates": [
+                    {
+                        "selected": [2],
+                        "labels": ["play Duraludon", "end turn"],
+                        "features": {
+                            "play_pokemon": 1.0,
+                            "end_turn": 1.0,
+                            "seq_uses_end": 1.0,
+                            "end_with_useful_action": 1.0,
+                        },
+                    },
+                    {
+                        "selected": [9],
+                        "labels": ["end turn"],
+                        "features": {"end_turn": 1.0},
+                    },
+                ],
+            },
+            {
+                "label_index": 0,
+                "matched": True,
+                "candidates": [
+                    {
+                        "selected": [2],
+                        "features": {
+                            "play_pokemon": 1.0,
+                            "end_turn": 1.0,
+                            "seq_uses_end": 1.0,
+                            "end_with_useful_action": 1.0,
+                        },
+                    },
+                    {
+                        "selected": [9],
+                        "features": {"end_turn": 1.0},
+                    },
+                ],
+            },
+        ]
+        labels_path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+        kept_path = tmp_path / "kept.jsonl"
+        kept = compact_label_dataset(str(labels_path), output=str(kept_path))
+        assert kept["output_records"] == 3
+
+        filtered_path = tmp_path / "filtered.jsonl"
+        filtered = compact_label_dataset(str(labels_path), output=str(filtered_path), exclude_passive_end_labels=True)
+        assert filtered["output_records"] == 2
+        assert filtered["skipped_passive_end_label"] == 1
 
 
 def test_decision_engine_warm_start_reuses_valid_remainder() -> None:
@@ -761,12 +897,14 @@ def test_replay_pipeline_smoke() -> None:
         assert mlp_summary["feature_count"] > 0
         assert mlp_summary["hidden_dims"] == [4, 2]
         assert mlp_summary["validation_fraction"] == 0.0
+        assert mlp_summary["excluded_features"] == ["linear_score", "mlp_score"]
         mlp_path = Path(mlp_summary["latest_checkpoint"])
         assert mlp_path.exists()
         model = MLPSequenceRanker.from_file(mlp_path)
         assert model.hidden_dims == [4, 2]
         assert model.feature_schema_version == "full"
         assert "linear_score" not in model.feature_index
+        assert "mlp_score" not in model.feature_index
         record = json.loads(labels_path.read_text(encoding="utf-8").splitlines()[0])
         scores = model.score_batch([candidate["features"] for candidate in record["candidates"]])
         assert len(scores) == len(record["candidates"])
@@ -843,6 +981,10 @@ def main() -> None:
     test_probability_model_hypergeometric_features()
     test_search_tree_reconstructs_leaf_sequence()
     test_empty_board_safety_features_prefer_benching_basic()
+    test_fallback_guardrail_does_not_apply_linear_margin_to_mlp_scores()
+    test_fallback_guardrail_can_still_use_strong_linear_fallback_with_mlp()
+    test_fallback_guardrail_respects_large_mlp_preference()
+    test_compact_label_dataset_filters_passive_end_labels()
     test_decision_engine_warm_start_reuses_valid_remainder()
     test_decision_engine_warm_start_clears_on_action_mismatch()
     test_prize_tracker_deck_reveal_infers_known_prizes()

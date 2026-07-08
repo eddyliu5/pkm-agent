@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from .progress import progress_iter
+
 
 MODEL_TYPE = "mlp_sequence_ranker"
 SCHEMA_VERSION = 2
-DEFAULT_EXCLUDED_FEATURES = ("linear_score",)
+DEFAULT_EXCLUDED_FEATURES = ("linear_score", "mlp_score")
 FEATURE_SCHEMA_ALIASES = {
     "sequence_v3_full": "full",
     "sequence_v3_clean": "clean",
@@ -131,18 +133,25 @@ def build_feature_stats(
     excluded_features: tuple[str, ...] = DEFAULT_EXCLUDED_FEATURES,
     validation_fraction: float = 0.0,
     seed: int = 13,
+    progress: bool = False,
 ) -> FeatureStats:
     counts: Counter[str] = Counter()
     example_count = 0
     candidate_count = 0
-    for _label_index, candidates in _iter_label_examples(
-        labels_path,
-        max_examples=max_examples,
-        excluded_features=excluded_features,
-        split="train",
-        validation_fraction=validation_fraction,
-        seed=seed,
-    ):
+    count_iter = progress_iter(
+        _iter_label_examples(
+            labels_path,
+            max_examples=max_examples,
+            excluded_features=excluded_features,
+            split="train",
+            validation_fraction=validation_fraction,
+            seed=seed,
+        ),
+        desc="mlp feature counts",
+        unit="ex",
+        enabled=progress,
+    )
+    for _label_index, candidates in count_iter:
         example_count += 1
         candidate_count += len(candidates)
         for features in candidates:
@@ -160,14 +169,21 @@ def build_feature_stats(
     sums = {name: 0.0 for name in names}
     sums_sq = {name: 0.0 for name in names}
     vector_count = 0
-    for _label_index, candidates in _iter_label_examples(
-        labels_path,
-        max_examples=max_examples,
-        excluded_features=excluded_features,
-        split="train",
-        validation_fraction=validation_fraction,
-        seed=seed,
-    ):
+    stats_iter = progress_iter(
+        _iter_label_examples(
+            labels_path,
+            max_examples=max_examples,
+            excluded_features=excluded_features,
+            split="train",
+            validation_fraction=validation_fraction,
+            seed=seed,
+        ),
+        desc="mlp feature stats",
+        unit="ex",
+        total=example_count,
+        enabled=progress,
+    )
+    for _label_index, candidates in stats_iter:
         for features in candidates:
             vector_count += 1
             for key, value in features.items():
@@ -230,19 +246,26 @@ def _evaluate_ranker(
     validation_fraction: float,
     seed: int,
     temperature: float,
+    progress: bool = False,
 ) -> dict[str, float]:
     examples = 0
     total_loss = 0.0
     top1 = 0
     top3 = 0
-    for label_index, candidates in _iter_label_examples(
-        labels_path,
-        max_examples=max_examples,
-        excluded_features=excluded_features,
-        split=split,
-        validation_fraction=validation_fraction,
-        seed=seed,
-    ):
+    eval_iter = progress_iter(
+        _iter_label_examples(
+            labels_path,
+            max_examples=max_examples,
+            excluded_features=excluded_features,
+            split=split,
+            validation_fraction=validation_fraction,
+            seed=seed,
+        ),
+        desc=f"mlp {split or 'eval'}",
+        unit="ex",
+        enabled=progress,
+    )
+    for label_index, candidates in eval_iter:
         scores = model.score_batch(candidates)
         probs = _softmax([score / max(1e-6, temperature) for score in scores])
         if not probs:
@@ -679,6 +702,7 @@ def pretrain_mlp_ranker(
     feature_schema_version: str = "full",
     validation_fraction: float = 0.10,
     exclude_features: tuple[str, ...] = DEFAULT_EXCLUDED_FEATURES,
+    progress: bool = False,
 ) -> dict[str, Any]:
     feature_schema_version = canonical_feature_schema_version(feature_schema_version)
     validation_fraction = max(0.0, min(0.9, float(validation_fraction)))
@@ -690,6 +714,7 @@ def pretrain_mlp_ranker(
         excluded_features=exclude_features,
         validation_fraction=validation_fraction,
         seed=seed,
+        progress=progress,
     )
     hidden_dim = int(hidden_dim) if int(hidden_dim) > 0 else _default_hidden_dim(len(stats.names))
     hidden_dim2 = int(hidden_dim2) if int(hidden_dim2) > 0 else max(16, hidden_dim // 2)
@@ -714,14 +739,21 @@ def pretrain_mlp_ranker(
         total_loss = 0.0
         top1 = 0
         top3 = 0
-        for label_index, candidates in _iter_label_examples(
-            labels_path,
-            max_examples=max_examples,
-            excluded_features=exclude_features,
-            split="train",
-            validation_fraction=validation_fraction,
-            seed=seed,
-        ):
+        train_iter = progress_iter(
+            _iter_label_examples(
+                labels_path,
+                max_examples=max_examples,
+                excluded_features=exclude_features,
+                split="train",
+                validation_fraction=validation_fraction,
+                seed=seed,
+            ),
+            desc=f"mlp epoch {epoch}/{max(1, int(epochs))}",
+            unit="ex",
+            total=stats.example_count,
+            enabled=progress,
+        )
+        for label_index, candidates in train_iter:
             loss, is_top1, is_top3 = model.train_step(
                 candidates,
                 label_index,
@@ -750,6 +782,7 @@ def pretrain_mlp_ranker(
             validation_fraction=validation_fraction,
             seed=seed,
             temperature=temperature,
+            progress=progress,
         ) if validation_fraction > 0.0 else {"examples": 0.0, "average_loss": 0.0, "top1_accuracy": 0.0, "top3_accuracy": 0.0}
         selection_metric = (
             validation_metrics["top1_accuracy"]

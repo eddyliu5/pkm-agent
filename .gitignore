@@ -33,6 +33,7 @@ submission.tar.gz
 
 # Generated training/evaluation/submission artifacts
 artifacts/
+baseline/compare/
 
 # Large/local Kaggle competition bundle.
 # Keep data/deck_db tracked; fetch or unpack the simulator bundle locally.

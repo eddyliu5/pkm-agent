@@ -67,8 +67,9 @@ The default training path keeps the simulator-backed sequence tree, uses linear 
 
 It trains:
 
-- full-schema linear sequence weights for search/planning support
+- full-schema linear sequence weights for diagnostics and ablations
 - full-schema two-hidden-layer MLP sequence ranker selected by validation top-1
+- runtime policy selection that packages the locally stronger selected-deck runtime
 
 Run the full training pipeline:
 
@@ -79,7 +80,7 @@ Run the full training pipeline:
 For a pilot run:
 
 ```bash
-MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 ./scripts/train_clean_models.sh
+MAX_EXAMPLES=1000 SEQ_EPOCHS=2 MLP_EPOCHS=2 FAST_DECK_SWEEP_GAMES=90 MIN_DECK_SWEEP_GAMES_PER_DECK=1 SKIP_SUBMIT=1 ./scripts/train_clean_models.sh
 ```
 
 Include self-play fine-tuning after replay pretraining:
@@ -88,30 +89,27 @@ Include self-play fine-tuning after replay pretraining:
 RUN_SELF_PLAY=1 SELF_PLAY_GAMES=5000 ./scripts/train_clean_models.sh
 ```
 
-Evaluate checkpoints against varied decks, including replay-observed top win-rate deck rotations:
+Evaluate checkpoints against varied decks, including replay-observed top win-rate deck rotations. The production default is `sequence`; MLP checkpoints should beat it locally before packaging:
 
 ```bash
 RUN_BASELINE_EVAL=1 BASELINE_EVAL_GAMES=100 ./scripts/train_clean_models.sh
 
 ./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/full_mlp_ranker/best.json,artifacts/checkpoints/full_sequence_linear/best.json \
+  --agent sequence \
   --opponent heuristic \
   --games 100
 
 ./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/full_mlp_ranker/best.json,artifacts/checkpoints/full_sequence_linear/best.json \
+  --agent sequence \
   --opponent deck-heuristic \
   --opponent-decks top_winrate \
   --games 100
 ```
 
-Package a full-schema MLP submission:
+Package through the training script so runtime policy selection and baseline gates are applied:
 
 ```bash
-./.venv/bin/python -m pokemon_agent.submission \
-  --weights artifacts/checkpoints/full_sequence_linear/best.json \
-  --mlp-model artifacts/checkpoints/full_mlp_ranker/best.json \
-  --output artifacts/submission/full_mlp_sequence_submission.tar.gz
+SKIP_TRAIN=1 BEST_DECK_ID=<deck_id> SKIP_SUBMIT=1 ./scripts/train_clean_models.sh
 ```
 
 For clean-schema ablations, run `TRAIN_SCHEMA=clean ./scripts/train_clean_models.sh`.
@@ -169,6 +167,16 @@ The MLP checkpoint is a JSON file with its feature vocabulary, input normalizati
 
 The runtime is intentionally strict. New MLP checkpoints must declare an explicit feature schema such as `full` or `clean`; legacy/unversioned checkpoints are unnecessary for the current workflow and should be retrained from scratch after architecture changes.
 
+To retrain only the MLP from an existing raw replay-label file, rebuild the compact MLP labels so passive expert END turns are filtered before pretraining:
+
+```bash
+TRAIN_ONLY=1 SKIP_LABEL_GENERATION=1 SKIP_SEQUENCE_TRAIN=1 ./scripts/train_clean_models.sh
+```
+
+`TRAIN_ONLY=1` exits after the training phases, before deck sweep, baseline evaluation, packaging, or Kaggle submission. `SKIP_SUBMIT=1` is not required for this retrain-only command.
+
+Use `SKIP_COMPACT_LABELS=1` only when the compact label file was already produced by this filtered path. Old compact labels should be treated as stale after MLP architecture or label-filter changes.
+
 Fine-tune the MLP ranker with self-play returns:
 
 ```bash
@@ -179,7 +187,7 @@ Fine-tune the MLP ranker with self-play returns:
   --checkpoint-every 250
 ```
 
-Evaluate an MLP checkpoint:
+Evaluate an MLP checkpoint. Treat this as a candidate comparison against `sequence`, not as an automatic submission path:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.eval --agent sequence-mlp:artifacts/checkpoints/mlp_self_play/best.json --opponent heuristic --games 100
@@ -195,15 +203,13 @@ Evaluate an MLP checkpoint on top of learned sequence weights. This is unnecessa
   --games 100
 ```
 
-Build an MLP submission:
+Build an MLP submission only after it wins local baselines:
 
 ```bash
-./.venv/bin/python -m pokemon_agent.submission \
-  --mlp-model artifacts/checkpoints/mlp_self_play/best.json \
-  --output artifacts/submission/mlp_sequence_submission.tar.gz
+RUNTIME_POLICY=mlp SKIP_TRAIN=1 BEST_DECK_ID=<deck_id> SKIP_SUBMIT=1 ./scripts/train_clean_models.sh
 ```
 
-Build a combined sequence-weight plus MLP submission. This is unnecessary unless the combined ablation beats the strict MLP-only path:
+Package a combined sequence-weight plus MLP ablation only after it beats the strict MLP-only path and the runtime linear weights pass safety checks. Do not use this as the default submission path:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.submission \
