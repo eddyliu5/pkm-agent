@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -207,6 +208,8 @@ def main() -> int:
             if args.skip_existing and existing_rows:
                 print(f"skip existing: {agent} {deck_id}", flush=True)
             else:
+                if out_dir.exists():
+                    shutil.rmtree(out_dir)
                 cmd = [
                     args.python,
                     "-m",
