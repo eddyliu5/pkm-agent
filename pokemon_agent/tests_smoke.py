@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .belief import PrizeTracker
+from .belief import OpponentTracker, PrizeTracker
 from .actions import ActionView, legal_actions, sanitize_selection
 from .config import load_config, read_deck
 from .acting.guardrails import FallbackGuardrail
@@ -247,6 +247,37 @@ def test_opponent_memory_setup_tag_clears_after_evolution() -> None:
     assert 678 in resolved.played_evolution_ids
     assert 677 not in resolved.setup_target_ids
     assert 678 in resolved.must_answer_target_ids
+
+
+def test_opponent_belief_exhausts_seen_limited_tools() -> None:
+    tool_id = 1159
+    db = {
+        "archetypes": {},
+        "decks": [
+            {
+                "id": "single_tool_test",
+                "name": "Single Tool Test",
+                "archetype": "single_tool_test",
+                "counts": [
+                    {"id": tool_id, "count": 1},
+                    {"id": 677, "count": 4},
+                    {"id": 678, "count": 3},
+                    {"id": 1025, "count": 12},
+                ],
+            }
+        ],
+    }
+    memory = OpponentMemory()
+    state = _memory_state(turn=3, opp_discard=(CardView(id=tool_id, name="Hero Cape", serial=1),))
+    memory.update(SimpleNamespace(logs=[]), state)
+
+    belief = OpponentTracker(db).update(SimpleNamespace(current=None, logs=[]), state, memory=memory)
+
+    assert belief.top_deck_id == "single_tool_test"
+    assert belief.remaining_tool_count == 0
+    assert belief.prob_has_tool == 0.0
+    assert belief.exhausted_tool
+    assert belief.remaining_card_counts[tool_id] == 0
 
 
 def test_probability_model_hypergeometric_features() -> None:

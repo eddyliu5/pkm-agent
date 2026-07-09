@@ -50,7 +50,7 @@ The simulator accepts only the next legal selection, so even when planning explo
 - `actions.py`: parses legal simulator options into `ActionView`s and sanitizes selections.
 - `state.py`: converts simulator observations into `AgentState`, `CardView`, and `PokemonView` structures.
 - `opponent_memory.py`: persists visible opponent cards, recent actions, setup targets, and inferred intent.
-- `belief.py`: builds own hidden-information samples, prize belief, and opponent archetype/intent belief.
+- `belief.py`: builds own hidden-information samples, prize belief, and opponent archetype/intent belief, including inferred remaining opponent card counts and exhausted resource categories.
 - `probability.py`: derives probability features from deck, visible cards, prizes, and belief state.
 - `game_plan.py`: builds phase and deck-strategy context from config card groups.
 - `observation/snapshots.py`: computes resource and threat snapshots.
@@ -93,7 +93,7 @@ When an MLP ranker is loaded, the intended architecture is linear-for-search and
 
 The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`.
 
-`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, self-deck archetype/plan, game-plan, resource, threat, opponent, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs while retaining self-deck context.
+`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, self-deck archetype/plan, game-plan, resource, threat, opponent remaining-count/exhaustion belief, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs while retaining self-deck context.
 
 ## Acting Layer
 

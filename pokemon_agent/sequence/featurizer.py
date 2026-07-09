@@ -76,6 +76,16 @@ class SequenceFeaturizer:
         features["threat_can_win_next_turn"] = threat.opponent_can_win_next_turn
         features["opponent_gust_risk"] = belief.opponent.prob_has_gust
         features["opponent_switch_risk"] = belief.opponent.prob_has_switch
+        features["opponent_tool_risk"] = belief.opponent.prob_has_tool
+        features["opponent_deck_confidence"] = belief.opponent.deck_confidence
+        features["opponent_deck_entropy"] = belief.opponent.deck_entropy
+        features["opponent_remaining_gust_count"] = min(1.0, float(belief.opponent.remaining_gust_count) / 4.0)
+        features["opponent_remaining_switch_count"] = min(1.0, float(belief.opponent.remaining_switch_count) / 4.0)
+        features["opponent_remaining_energy_count"] = min(1.0, float(belief.opponent.remaining_energy_count) / 18.0)
+        features["opponent_remaining_tool_count"] = min(1.0, float(belief.opponent.remaining_tool_count) / 4.0)
+        features["opponent_exhausted_gust"] = 1.0 if belief.opponent.exhausted_gust else 0.0
+        features["opponent_exhausted_switch"] = 1.0 if belief.opponent.exhausted_switch else 0.0
+        features["opponent_exhausted_tool"] = 1.0 if belief.opponent.exhausted_tool else 0.0
         features["opponent_recent_pokemon_search"] = belief.opponent.intent.recent_pokemon_search
         features["opponent_recent_evolution_search"] = belief.opponent.intent.recent_evolution_search
         features["opponent_recent_gust_seen"] = belief.opponent.intent.recent_gust_seen
@@ -197,6 +207,18 @@ class CleanSequenceFeaturizer:
         features[f"turn_goal_{plan.turn_plan.primary_goal}"] = 1.0
         features.update(self._board_features(root_state))
         intent = belief.opponent.intent
+        features["opponent_deck_confidence"] = belief.opponent.deck_confidence
+        features["opponent_deck_entropy"] = belief.opponent.deck_entropy
+        features["opponent_gust_risk"] = belief.opponent.prob_has_gust
+        features["opponent_switch_risk"] = belief.opponent.prob_has_switch
+        features["opponent_tool_risk"] = belief.opponent.prob_has_tool
+        features["opponent_remaining_gust_count"] = min(1.0, float(belief.opponent.remaining_gust_count) / 4.0)
+        features["opponent_remaining_switch_count"] = min(1.0, float(belief.opponent.remaining_switch_count) / 4.0)
+        features["opponent_remaining_energy_count"] = min(1.0, float(belief.opponent.remaining_energy_count) / 18.0)
+        features["opponent_remaining_tool_count"] = min(1.0, float(belief.opponent.remaining_tool_count) / 4.0)
+        features["opponent_exhausted_gust"] = 1.0 if belief.opponent.exhausted_gust else 0.0
+        features["opponent_exhausted_switch"] = 1.0 if belief.opponent.exhausted_switch else 0.0
+        features["opponent_exhausted_tool"] = 1.0 if belief.opponent.exhausted_tool else 0.0
         features["opponent_recent_pokemon_search"] = intent.recent_pokemon_search
         features["opponent_recent_evolution_search"] = intent.recent_evolution_search
         features["opponent_likely_setting_up_attacker"] = intent.likely_setting_up_attacker

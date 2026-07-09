@@ -4,4 +4,4 @@ Purpose: convert raw simulator observations into agent-owned state, legal action
 
 Target behavior: observation is deterministic for a fixed raw observation and memory state. It must not run simulator search, score candidate lines, or make policy decisions.
 
-Trainable modules: none in this package. Evaluation metrics are parser determinism, legal-action parse correctness, prize-belief card-count consistency, opponent-archetype update behavior, and probability snapshot stability for unchanged visible/belief inputs.
+Trainable modules: none in this package. Evaluation metrics are parser determinism, legal-action parse correctness, prize-belief card-count consistency, opponent-archetype update behavior, opponent remaining-count/exhaustion consistency, and probability snapshot stability for unchanged visible/belief inputs.
