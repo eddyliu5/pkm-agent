@@ -319,6 +319,8 @@ def make_policy(
     if spec.startswith("sequence-mlp:"):
         cfg = config or load_config()
         payload = spec.split(":", 1)[1]
+        opts = dict(sequence_options)
+        opts["mlp_enabled"] = True
         if "," in payload:
             mlp_path, weights_path = payload.split(",", 1)
             return SequencePolicy(
@@ -327,9 +329,27 @@ def make_policy(
                 config=cfg,
                 deck=deck or read_deck(config=cfg),
                 seed=seed,
-                **sequence_options,
+                **opts,
             )
-        return SequencePolicy(mlp_model_path=payload, config=cfg, deck=deck or read_deck(config=cfg), seed=seed, **sequence_options)
+        return SequencePolicy(mlp_model_path=payload, config=cfg, deck=deck or read_deck(config=cfg), seed=seed, **opts)
+    if spec.startswith("sequence-mlp-blend:"):
+        cfg = config or load_config()
+        payload = spec.split(":", 1)[1]
+        try:
+            mlp_path, linear_weight, mlp_weight = payload.rsplit(":", 2)
+        except ValueError as exc:
+            raise ValueError("Expected sequence-mlp-blend:<mlp_path>:<linear_weight>:<mlp_weight>") from exc
+        opts = dict(sequence_options)
+        opts["mlp_enabled"] = True
+        return SequencePolicy(
+            mlp_model_path=mlp_path,
+            config=cfg,
+            deck=deck or read_deck(config=cfg),
+            linear_score_weight=float(linear_weight),
+            mlp_score_weight=float(mlp_weight),
+            seed=seed,
+            **opts,
+        )
     if spec == "sequence-clean":
         cfg = config or load_config()
         return SequencePolicy(
@@ -356,6 +376,8 @@ def make_policy(
     if spec.startswith("sequence-clean-mlp:"):
         cfg = config or load_config()
         payload = spec.split(":", 1)[1]
+        opts = dict(sequence_options)
+        opts["mlp_enabled"] = True
         if "," in payload:
             mlp_path, weights_path = payload.split(",", 1)
             return SequencePolicy(
@@ -367,7 +389,7 @@ def make_policy(
                 linear_score_weight=0.0,
                 mlp_score_weight=1.0,
                 seed=seed,
-                **sequence_options,
+                **opts,
             )
         return SequencePolicy(
             mlp_model_path=payload,
@@ -377,7 +399,7 @@ def make_policy(
             linear_score_weight=0.0,
             mlp_score_weight=1.0,
             seed=seed,
-            **sequence_options,
+            **opts,
         )
     if spec.startswith("linear:"):
         return LinearQPolicy.from_file(spec.split(":", 1)[1], config=config)

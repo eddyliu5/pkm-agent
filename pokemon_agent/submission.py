@@ -37,7 +37,7 @@ def build_raw_agent_submission(
     shutil.copy2(main_path, build_dir / "main.py")
     for csv_path in source_dir.glob("*.csv"):
         shutil.copy2(csv_path, build_dir / csv_path.name)
-    ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc")
+    ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
     shutil.copytree(cg_root() / "cg", build_dir / "cg", ignore=ignore_generated)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +56,8 @@ def build_submission(
     output: str = "artifacts/submission/submission.tar.gz",
     clean_evaluator: bool = False,
     deck_id: str | None = None,
+    linear_score_weight: float | None = None,
+    mlp_score_weight: float = 1.0,
 ) -> Path:
     output_path = Path(output)
     if not output_path.is_absolute():
@@ -95,7 +97,7 @@ def build_submission(
         else:
             packaged_mlp_model = "mlp_model.json"
         shutil.copy2(source_mlp_model, build_dir / packaged_mlp_model)
-    linear_score_weight = 0.0 if mlp_model_path else 1.0
+    packaged_linear_score_weight = float(linear_score_weight) if linear_score_weight is not None else (0.0 if mlp_model_path else 1.0)
     with (build_dir / "runtime_config.json").open("w", encoding="utf-8") as fh:
         json.dump(
             {
@@ -106,8 +108,8 @@ def build_submission(
                 "fallback_guardrail_enabled": True,
                 "engine_exception_fallback_enabled": False,
                 "num_hidden_samples": 1,
-                "linear_score_weight": linear_score_weight,
-                "mlp_score_weight": 1.0,
+                "linear_score_weight": packaged_linear_score_weight,
+                "mlp_score_weight": float(mlp_score_weight),
                 "mlp_model_file": packaged_mlp_model,
             },
             fh,
@@ -116,7 +118,7 @@ def build_submission(
         )
 
     (build_dir / "main.py").write_text("from pokemon_agent.runtime_agent import agent\n", encoding="utf-8")
-    ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc")
+    ignore_generated = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
     shutil.copytree(PROJECT_ROOT / "pokemon_agent", build_dir / "pokemon_agent", ignore=ignore_generated)
     config_dir = build_dir / "configs"
     config_dir.mkdir()
@@ -146,6 +148,8 @@ def main() -> None:
     parser.add_argument("--clean", action="store_true", help="Package the clean sequence evaluator runtime.")
     parser.add_argument("--deck-id", default=None, help="Package this deck_db deck id instead of the default deck.")
     parser.add_argument("--raw-agent-dir", default=None, help="Package a Kaggle-style raw agent directory with main.py and deck.csv.")
+    parser.add_argument("--linear-score-weight", type=float, default=None, help="Runtime linear evaluator weight. Defaults to 0 with MLP, 1 without MLP.")
+    parser.add_argument("--mlp-score-weight", type=float, default=1.0, help="Runtime MLP score weight.")
     args = parser.parse_args()
     if args.raw_agent_dir:
         build_raw_agent_submission(
@@ -159,6 +163,8 @@ def main() -> None:
         output=args.output,
         clean_evaluator=args.clean,
         deck_id=args.deck_id,
+        linear_score_weight=args.linear_score_weight,
+        mlp_score_weight=args.mlp_score_weight,
     )
 
 

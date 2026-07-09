@@ -937,19 +937,39 @@ def test_replay_pipeline_smoke() -> None:
         assert isinstance(combined, SequencePolicy)
         assert combined.engine.scorer.linear_weight == 0.0
         assert combined.engine.scorer.mlp_weight == 1.0
+        forced_mlp = make_policy(
+            f"sequence-mlp:{packaged_mlp_path}",
+            config=config,
+            seed=10,
+            sequence_options={"mlp_enabled": False},
+        )
+        assert isinstance(forced_mlp, SequencePolicy)
+        assert forced_mlp.engine.scorer.mlp_ranker is not None
+        blended = make_policy(
+            f"sequence-mlp-blend:{packaged_mlp_path}:1:25",
+            config=config,
+            seed=11,
+            sequence_options={"mlp_enabled": False},
+        )
+        assert isinstance(blended, SequencePolicy)
+        assert blended.engine.scorer.linear_weight == 1.0
+        assert blended.engine.scorer.mlp_weight == 25.0
+        assert blended.engine.scorer.mlp_ranker is not None
 
         bundled = build_submission(
             weights_path=train_summary["latest_checkpoint"],
             mlp_model_path=str(packaged_mlp_path),
             output=str(tmp_path / "mlp_submission.tar.gz"),
+            linear_score_weight=1.0,
+            mlp_score_weight=25.0,
         )
         with tarfile.open(bundled, "r:gz") as tar:
             names = set(tar.getnames())
             runtime_config = json.loads(tar.extractfile("runtime_config.json").read().decode("utf-8"))  # type: ignore[union-attr]
         assert expected_mlp_name in names
         assert "weights.json" in names
-        assert runtime_config["linear_score_weight"] == 0.0
-        assert runtime_config["mlp_score_weight"] == 1.0
+        assert runtime_config["linear_score_weight"] == 1.0
+        assert runtime_config["mlp_score_weight"] == 25.0
         assert runtime_config["mlp_model_file"] == expected_mlp_name
 
 
