@@ -36,6 +36,7 @@ class SequenceEvaluator:
     def evaluate(self, planning: PlanningResult) -> EvaluationResult:
         observed = planning.observed
         scored: list[ScoredCandidate] = []
+        root_counterplay_risk = self.counterplay_model.response_risk(observed.state, observed.belief.opponent).total
         for sequence in planning.candidates:
             features = self.featurizer.featurize(
                 observed.state,
@@ -49,10 +50,24 @@ class SequenceEvaluator:
             if not self.clean and self.value_proxy_enabled:
                 features["value_model_score"] = value_score
             risk_score = self.risk_model.score(features)
-            counterplay_score = self.counterplay_model.score(features)
+            counterplay = self.counterplay_model.evaluate(
+                observed.state,
+                sequence.state,
+                observed.belief.opponent,
+                root_risk=root_counterplay_risk,
+            )
+            counterplay_score = counterplay.score
             plan_bonus = self._plan_bonus(features)
             features["risk_model_score"] = risk_score
             features["opponent_counterplay_score"] = counterplay_score
+            features["opponent_response_risk"] = counterplay.final_risk.total
+            features["opponent_response_fragility"] = counterplay.fragility
+            features["opponent_response_active_attack"] = counterplay.final_risk.active_attack
+            features["opponent_response_gust_attack"] = counterplay.final_risk.gust_attack
+            features["opponent_response_switch_attack"] = counterplay.final_risk.switch_attack
+            features["opponent_response_energy_attack"] = counterplay.final_risk.energy_attack
+            features["opponent_response_tool_attack"] = counterplay.final_risk.tool_attack
+            features["opponent_response_evolution_attack"] = counterplay.final_risk.evolution_attack
             features["plan_bonus_score"] = plan_bonus
             score = self.scorer.score(features)
             scored.append(

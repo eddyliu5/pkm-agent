@@ -18,13 +18,14 @@ from .config import load_config, read_deck
 from .acting.guardrails import FallbackGuardrail
 from .decision_engine import DecisionEngine
 from .decision_types import ScoreBreakdown, ScoredCandidate
+from .evaluation.counterplay_model import CounterplayModel
 from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_decks, load_deck_db, rank_decks_by_observed_cards, validate_deck
 from .engine import run_episode
 from .eval import _opponent_deck_pool
 from .features import default_weights, extract_action_features, score_features
 from .mlp_ranker import MLPSequenceRanker, pretrain_mlp_ranker, torch_available
 from .policy import HeuristicPolicy, RandomPolicy, SequencePolicy, make_policy
-from .opponent_memory import OpponentMemory
+from .opponent_memory import OpponentMemory, ResponseOpportunity
 from .probability import ProbabilityModel, hypergeometric_at_least_one, hypergeometric_pmf
 from .planning.pruning import SequencePruner
 from .replay_pipeline import (
@@ -278,6 +279,163 @@ def test_opponent_belief_exhausts_seen_limited_tools() -> None:
     assert belief.prob_has_tool == 0.0
     assert belief.exhausted_tool
     assert belief.remaining_card_counts[tool_id] == 0
+
+
+def test_opponent_belief_mixes_plausible_deck_remaining_counts() -> None:
+    tool_id = 1159
+    db = {
+        "archetypes": {},
+        "decks": [
+            {
+                "id": "one_tool",
+                "name": "One Tool",
+                "archetype": "tool_test",
+                "counts": [{"id": tool_id, "count": 1}, {"id": 677, "count": 4}],
+            },
+            {
+                "id": "two_tools",
+                "name": "Two Tools",
+                "archetype": "tool_test",
+                "counts": [{"id": tool_id, "count": 2}, {"id": 677, "count": 4}],
+            },
+        ],
+    }
+    memory = OpponentMemory()
+    state = _memory_state(turn=3, opp_discard=(CardView(id=tool_id, name="Hero Cape", serial=1),))
+    memory.update(SimpleNamespace(logs=[]), state)
+
+    belief = OpponentTracker(db).update(SimpleNamespace(current=None, logs=[]), state, memory=memory)
+
+    assert len(belief.deck_hypotheses) == 2
+    assert math.isclose(sum(row.weight for row in belief.deck_hypotheses), 1.0)
+    assert math.isclose(belief.archetype_probs["tool_test"], 1.0)
+    assert 0.0 < belief.remaining_tool_count < 1.0
+    assert belief.prob_has_tool > 0.0
+    assert not belief.exhausted_tool
+
+
+def test_counterplay_model_penalizes_sequence_created_gust_target() -> None:
+    root = replace(
+        _memory_state(turn=4),
+        my_active=replace(_fake_pokemon(677, hp=300, max_hp=300), prize_value=1),
+        opp_active=_fake_pokemon(678, energy_count=1),
+        opp_hand_count=5,
+    )
+    vulnerable = replace(_fake_pokemon(677, hp=100, max_hp=100), prize_value=2)
+    final = replace(root, my_bench=(vulnerable,))
+    opponent = SimpleNamespace(
+        prob_has_gust=0.6,
+        prob_has_switch=0.0,
+        prob_has_energy=0.0,
+        prob_has_tool=0.0,
+        intent=SimpleNamespace(setup_target_ids=()),
+        main_attacker_ids=(),
+        remaining_card_counts=Counter(),
+    )
+
+    evaluation = CounterplayModel().evaluate(root, final, opponent)
+
+    assert evaluation.final_risk.gust_attack > 0.0
+    assert evaluation.fragility > 0.0
+    assert evaluation.score < 0.0
+
+
+def test_missed_response_softens_hand_probability_but_keeps_draw_access() -> None:
+    gust_id = 1182
+    db = {
+        "archetypes": {},
+        "decks": [
+            {
+                "id": "gust_test",
+                "name": "Gust Test",
+                "archetype": "gust_test",
+                "counts": [{"id": gust_id, "count": 4}, {"id": 677, "count": 4}],
+            }
+        ],
+    }
+    memory = OpponentMemory()
+    memory.arm_response_opportunities(
+        4,
+        (ResponseOpportunity(category="gust", prior_probability=0.6, use_probability=0.8),),
+    )
+    state = _memory_state(turn=6)
+    memory.update(SimpleNamespace(logs=[]), state)
+
+    adjusted = memory.adjusted_hand_probability(
+        "gust",
+        0.6,
+        draw_probability=0.0,
+        current_turn=6,
+    )
+    belief = OpponentTracker(db).update(SimpleNamespace(current=None, logs=[]), state, memory=memory)
+
+    assert 0.0 < adjusted < 0.6
+    assert math.isclose(belief.prob_in_hand_gust, adjusted)
+    assert belief.prob_has_gust > belief.prob_in_hand_gust
+
+
+def test_opponent_known_hand_tracks_revealed_move_and_card_instance_once() -> None:
+    gust_id = 1182
+    db = {
+        "archetypes": {},
+        "decks": [
+            {
+                "id": "known_hand_test",
+                "name": "Known Hand Test",
+                "archetype": "known_hand_test",
+                "counts": [{"id": gust_id, "count": 2}, {"id": 677, "count": 4}],
+            }
+        ],
+    }
+    memory = OpponentMemory()
+    searched = SimpleNamespace(
+        type=6,
+        playerIndex=1,
+        cardId=gust_id,
+        serial=99,
+        fromArea=1,
+        toArea=2,
+    )
+    state = _memory_state(turn=3)
+    memory.update(SimpleNamespace(logs=[searched]), state)
+    belief = OpponentTracker(db).update(SimpleNamespace(current=None, logs=[]), state, memory=memory)
+
+    assert memory.known_hand_counts()[gust_id] == 1
+    assert memory.observed_card_ids[gust_id] == 1
+    assert belief.known_hand_counts[gust_id] == 1
+    assert belief.prob_in_hand_gust == 1.0
+
+    played = SimpleNamespace(type=10, playerIndex=1, cardId=gust_id, serial=99)
+    memory.update(SimpleNamespace(logs=[played]), _memory_state(turn=4))
+
+    assert memory.known_hand_counts()[gust_id] == 0
+    assert memory.observed_card_ids[gust_id] == 1
+
+
+def test_hand_reset_weakens_missed_response_evidence() -> None:
+    memory = OpponentMemory()
+    memory.arm_response_opportunities(
+        4,
+        (ResponseOpportunity(category="gust", prior_probability=0.6, use_probability=0.8),),
+    )
+    reset_move = SimpleNamespace(
+        type=6,
+        playerIndex=1,
+        cardId=677,
+        serial=77,
+        fromArea=2,
+        toArea=1,
+    )
+    memory.update(SimpleNamespace(logs=[reset_move]), _memory_state(turn=6))
+
+    adjusted = memory.adjusted_hand_probability(
+        "gust",
+        0.6,
+        draw_probability=0.0,
+        current_turn=6,
+    )
+
+    assert 0.45 < adjusted < 0.6
 
 
 def test_probability_model_hypergeometric_features() -> None:

@@ -142,10 +142,25 @@ class DecisionEngine:
                 return self._fallback_choose(obs)
         else:
             decision = self._choose_sequence(obs, mode=mode)
+        self._arm_opponent_response_evidence(decision)
         self.last_chosen_sequence = decision.chosen_sequence
         self.last_trace = decision.trace
         self.last_decision = decision
         return decision.selected
+
+    def _arm_opponent_response_evidence(self, decision: AgentDecision) -> None:
+        observed = self.last_observed_context
+        scored = decision.scored_candidate
+        if observed is None or scored is None or decision.chosen_sequence is None or not scored.candidate.steps:
+            return
+        first_actions = scored.candidate.steps[0].actions
+        if not any(action.is_attack or action.is_end for action in first_actions):
+            return
+        opportunities = self.evaluator.counterplay_model.response_opportunities(
+            scored.candidate.state,
+            observed.belief.opponent,
+        )
+        self.opponent_memory.arm_response_opportunities(observed.state.turn, opportunities)
 
     def score_sequences(self, obs: Any) -> list[CandidateSequence]:
         if obs.current is None:

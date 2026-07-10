@@ -77,6 +77,10 @@ class SequenceFeaturizer:
         features["opponent_gust_risk"] = belief.opponent.prob_has_gust
         features["opponent_switch_risk"] = belief.opponent.prob_has_switch
         features["opponent_tool_risk"] = belief.opponent.prob_has_tool
+        features["opponent_gust_in_hand"] = belief.opponent.prob_in_hand_gust
+        features["opponent_switch_in_hand"] = belief.opponent.prob_in_hand_switch
+        features["opponent_energy_in_hand"] = belief.opponent.prob_in_hand_energy
+        features["opponent_tool_in_hand"] = belief.opponent.prob_in_hand_tool
         features["opponent_deck_confidence"] = belief.opponent.deck_confidence
         features["opponent_deck_entropy"] = belief.opponent.deck_entropy
         features["opponent_remaining_gust_count"] = min(1.0, float(belief.opponent.remaining_gust_count) / 4.0)
@@ -212,6 +216,10 @@ class CleanSequenceFeaturizer:
         features["opponent_gust_risk"] = belief.opponent.prob_has_gust
         features["opponent_switch_risk"] = belief.opponent.prob_has_switch
         features["opponent_tool_risk"] = belief.opponent.prob_has_tool
+        features["opponent_gust_in_hand"] = belief.opponent.prob_in_hand_gust
+        features["opponent_switch_in_hand"] = belief.opponent.prob_in_hand_switch
+        features["opponent_energy_in_hand"] = belief.opponent.prob_in_hand_energy
+        features["opponent_tool_in_hand"] = belief.opponent.prob_in_hand_tool
         features["opponent_remaining_gust_count"] = min(1.0, float(belief.opponent.remaining_gust_count) / 4.0)
         features["opponent_remaining_switch_count"] = min(1.0, float(belief.opponent.remaining_switch_count) / 4.0)
         features["opponent_remaining_energy_count"] = min(1.0, float(belief.opponent.remaining_energy_count) / 18.0)

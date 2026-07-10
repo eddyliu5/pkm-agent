@@ -49,8 +49,8 @@ The simulator accepts only the next legal selection, so even when planning explo
 
 - `actions.py`: parses legal simulator options into `ActionView`s and sanitizes selections.
 - `state.py`: converts simulator observations into `AgentState`, `CardView`, and `PokemonView` structures.
-- `opponent_memory.py`: persists visible opponent cards, recent actions, setup targets, and inferred intent.
-- `belief.py`: builds own hidden-information samples, prize belief, and opponent archetype/intent belief, including inferred remaining opponent card counts and exhausted resource categories.
+- `opponent_memory.py`: persists unique visible opponent card instances, explicitly revealed hand cards, recent actions, setup targets, inferred intent, and soft evidence from high-value responses the opponent declined to make.
+- `belief.py`: builds own hidden-information samples, prize belief, and opponent archetype/intent belief. Opponent deck inference mixes the top plausible deck hypotheses, carries weighted remaining counts, only marks resource categories exhausted when the plausible hypotheses support it, and separates current-hand probability from next-turn access after a possible draw.
 - `probability.py`: derives probability features from deck, visible cards, prizes, and belief state.
 - `game_plan.py`: builds phase and deck-strategy context from config card groups.
 - `observation/snapshots.py`: computes resource and threat snapshots.
@@ -86,14 +86,14 @@ Planning can also receive a validated warm-start continuation from the previous 
 - optional MLP ranker score from `MLPSequenceRanker`
 - optional heuristic state-delta value proxy
 - risk-model score
-- opponent-counterplay score
+- opponent-counterplay score, based on the increase in immediate response risk created by the candidate sequence
 - plan-priority bonus
 
 When an MLP ranker is loaded, the intended architecture is linear-for-search and MLP-for-ranking: linear weights still feed planner expansion, pruning, fallback, and diagnostics, while final candidate score defaults to `mlp_score` only (`linear_score_weight=0.0`, `mlp_score_weight=1.0`). Guardrails remain enabled after ranking to reject invalid or obviously unsafe final selections.
 
 The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`.
 
-`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, self-deck archetype/plan, game-plan, resource, threat, opponent remaining-count/exhaustion belief, probability, card-knowledge, and field-attention features. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs while retaining self-deck context.
+`sequence/featurizer.py` owns candidate feature extraction. The full featurizer includes action, consequence, self-deck archetype/plan, game-plan, resource, threat, opponent hand/access and remaining-count/exhaustion belief, probability, card-knowledge, and field-attention features. The evaluator adds candidate-specific active, gust, switch, energy, tool, and evolution response risks after featurization. The clean featurizer keeps a narrower consequence-focused schema for clean training/evaluation runs while retaining self-deck context.
 
 ## Acting Layer
 

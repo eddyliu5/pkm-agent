@@ -23,23 +23,39 @@ class PrizeInfo:
 
 
 @dataclass(frozen=True)
+class OpponentDeckHypothesis:
+    deck_id: str
+    archetype: str
+    weight: float
+    match_score: float
+    original_card_counts: Counter[int]
+    remaining_card_counts: Counter[int]
+
+
+@dataclass(frozen=True)
 class OpponentBelief:
     archetype_probs: dict[str, float]
+    deck_hypotheses: tuple[OpponentDeckHypothesis, ...]
     top_deck_id: str | None
     top_archetype: str | None
     observed_cards: tuple[int, ...]
     observed_card_counts: Counter[int]
+    known_hand_counts: Counter[int]
     remaining_card_counts: Counter[int]
     deck_confidence: float
     deck_entropy: float
+    prob_in_hand_gust: float
+    prob_in_hand_switch: float
+    prob_in_hand_energy: float
+    prob_in_hand_tool: float
     prob_has_gust: float
     prob_has_switch: float
     prob_has_energy: float
     prob_has_tool: float
-    remaining_gust_count: int
-    remaining_switch_count: int
-    remaining_energy_count: int
-    remaining_tool_count: int
+    remaining_gust_count: float
+    remaining_switch_count: float
+    remaining_energy_count: float
+    remaining_tool_count: float
     exhausted_gust: bool
     exhausted_switch: bool
     exhausted_tool: bool
@@ -277,14 +293,19 @@ def _is_tool_card(card_id: int) -> bool:
     return bool(data and (data.cardType == 4 or any(part in name for part in ("tool", "cape", "belt", "band"))))
 
 
-def _remaining_category_count(counts: Counter[int], predicate: Any) -> int:
-    return int(sum(count for cid, count in counts.items() if predicate(int(cid))))
+def _remaining_category_count(counts: Counter[int], predicate: Any) -> float:
+    return float(sum(count for cid, count in counts.items() if predicate(int(cid))))
 
 
-def _prob_from_count(count: int, hand_count: int, hidden_count: int) -> float:
+def _prob_from_count(count: float, hand_count: int, hidden_count: int) -> float:
     if count <= 0 or hand_count <= 0:
         return 0.0
     return max(0.0, min(1.0, 1.0 - ((max(0, hidden_count - count) / max(1, hidden_count)) ** hand_count)))
+
+
+def _access_after_draw(hand_probability: float, remaining_count: float, hidden_count: int) -> float:
+    draw_probability = max(0.0, min(1.0, float(remaining_count) / max(1.0, float(hidden_count))))
+    return max(0.0, min(1.0, 1.0 - ((1.0 - hand_probability) * (1.0 - draw_probability))))
 
 
 def _normalized_entropy(probs: dict[str, float]) -> float:
@@ -293,6 +314,47 @@ def _normalized_entropy(probs: dict[str, float]) -> float:
         return 0.0
     entropy = -sum(value * math.log(value) for value in values)
     return max(0.0, min(1.0, entropy / math.log(len(values))))
+
+
+def _hypothesis_weights(ranked: list[dict[str, Any]]) -> list[float]:
+    raw = [max(0.01, float(row["score"]) + 0.01) for row in ranked]
+    total = sum(raw) or 1.0
+    return [value / total for value in raw]
+
+
+def _weighted_remaining_counts(hypotheses: Iterable[OpponentDeckHypothesis]) -> Counter[int]:
+    counts: Counter[int] = Counter()
+    for hypothesis in hypotheses:
+        for card_id, count in hypothesis.remaining_card_counts.items():
+            counts[int(card_id)] += float(hypothesis.weight) * float(count)
+    return _positive_counts(counts)
+
+
+def _robustly_exhausted(
+    hypotheses: tuple[OpponentDeckHypothesis, ...],
+    category: Any,
+    *,
+    high_confidence: float = 0.85,
+) -> bool:
+    if not hypotheses:
+        return False
+    meaningful = tuple(hypothesis for hypothesis in hypotheses if hypothesis is hypotheses[0] or hypothesis.weight >= 0.10)
+    original = [
+        _remaining_category_count(hypothesis.original_card_counts, category)
+        for hypothesis in meaningful
+    ]
+    remaining = [
+        _remaining_category_count(hypothesis.remaining_card_counts, category)
+        for hypothesis in meaningful
+    ]
+    if any(count > 0 for count in original) and all(count <= 0 for count in remaining):
+        return True
+    top = hypotheses[0]
+    return bool(
+        top.weight >= high_confidence
+        and _remaining_category_count(top.original_card_counts, category) > 0
+        and _remaining_category_count(top.remaining_card_counts, category) <= 0
+    )
 
 
 class OpponentTracker:
@@ -304,21 +366,62 @@ class OpponentTracker:
         observed_counts = _observed_opponent_card_counts(obs, state.opponent_index, memory)
         observed = list(observed_counts.elements())
         ranked = rank_decks_by_observed_cards(observed, self.db, top_n=3)
-        total = sum(max(0.01, row["score"] + 0.01) for row in ranked) or 1.0
-        probs = {row["archetype"]: max(0.01, row["score"] + 0.01) / total for row in ranked}
+        weights = _hypothesis_weights(ranked)
+        hypotheses: list[OpponentDeckHypothesis] = []
+        probs: dict[str, float] = {}
+        for row, weight in zip(ranked, weights):
+            deck = get_deck(row["deck_id"], self.db)
+            deck_counts = _count_deck(expand_deck(deck)) if deck else Counter()
+            hypothesis = OpponentDeckHypothesis(
+                deck_id=str(row["deck_id"]),
+                archetype=str(row["archetype"]),
+                weight=float(weight),
+                match_score=float(row["score"]),
+                original_card_counts=deck_counts,
+                remaining_card_counts=_subtract_counts(deck_counts, observed_counts),
+            )
+            hypotheses.append(hypothesis)
+            probs[hypothesis.archetype] = probs.get(hypothesis.archetype, 0.0) + hypothesis.weight
+        hypothesis_tuple = tuple(hypotheses)
         top = ranked[0] if ranked else None
-        top_deck = get_deck(top["deck_id"], self.db) if top else None
         top_profile = self.profiles.get(top["archetype"]) if top else None
-        counts = _count_deck(expand_deck(top_deck)) if top_deck else Counter()
-        remaining_counts = _subtract_counts(counts, observed_counts)
+        remaining_counts = _weighted_remaining_counts(hypothesis_tuple)
         hidden_count = max(1, state.opp_deck_count + state.opp_hand_count + state.opp_prizes_remaining)
-        gust_count = sum(count for cid, count in counts.items() if _contains_name(cid, ("boss", "catcher", "gust")))
-        switch_count = sum(count for cid, count in counts.items() if _contains_name(cid, ("switch", "cart")))
-        tool_count = _remaining_category_count(counts, _is_tool_card)
         remaining_gust = _remaining_category_count(remaining_counts, lambda cid: _contains_name(cid, ("boss", "catcher", "gust")))
         remaining_switch = _remaining_category_count(remaining_counts, lambda cid: _contains_name(cid, ("switch", "cart")))
         remaining_energy = _remaining_category_count(remaining_counts, _is_energy_card)
         remaining_tool = _remaining_category_count(remaining_counts, _is_tool_card)
+        known_hand_counts = memory.known_hand_counts() if memory is not None else Counter()
+        base_hand = {
+            "gust": _prob_from_count(remaining_gust, state.opp_hand_count, hidden_count),
+            "switch": _prob_from_count(remaining_switch, state.opp_hand_count, hidden_count),
+            "energy": _prob_from_count(remaining_energy, state.opp_hand_count, hidden_count),
+            "tool": _prob_from_count(remaining_tool, state.opp_hand_count, hidden_count),
+        }
+        remaining_by_category = {
+            "gust": remaining_gust,
+            "switch": remaining_switch,
+            "energy": remaining_energy,
+            "tool": remaining_tool,
+        }
+        hand_probability = dict(base_hand)
+        if memory is not None:
+            for category, probability in base_hand.items():
+                draw_probability = max(0.0, min(1.0, remaining_by_category[category] / max(1.0, float(hidden_count))))
+                hand_probability[category] = memory.adjusted_hand_probability(
+                    category,
+                    probability,
+                    draw_probability=draw_probability,
+                    current_turn=state.turn,
+                )
+        if _remaining_category_count(known_hand_counts, lambda cid: _contains_name(cid, ("boss", "catcher", "gust"))) > 0:
+            hand_probability["gust"] = 1.0
+        if _remaining_category_count(known_hand_counts, lambda cid: _contains_name(cid, ("switch", "cart"))) > 0:
+            hand_probability["switch"] = 1.0
+        if _remaining_category_count(known_hand_counts, _is_energy_card) > 0:
+            hand_probability["energy"] = 1.0
+        if _remaining_category_count(known_hand_counts, _is_tool_card) > 0:
+            hand_probability["tool"] = 1.0
         damage_ceiling = 0.0
         for pokemon in ([state.opp_active] if state.opp_active else []) + list(state.opp_bench):
             data = card_data(pokemon.id)
@@ -330,24 +433,30 @@ class OpponentTracker:
         intent = memory.snapshot(state, main_attacker_ids) if memory is not None else EMPTY_OPPONENT_INTENT
         return OpponentBelief(
             archetype_probs=probs,
+            deck_hypotheses=hypothesis_tuple,
             top_deck_id=top["deck_id"] if top else None,
             top_archetype=top["archetype"] if top else None,
             observed_cards=tuple(observed),
             observed_card_counts=observed_counts,
+            known_hand_counts=known_hand_counts,
             remaining_card_counts=remaining_counts,
-            deck_confidence=max(probs.values()) if probs else 0.0,
-            deck_entropy=_normalized_entropy(probs),
-            prob_has_gust=_prob_from_count(remaining_gust, state.opp_hand_count, hidden_count),
-            prob_has_switch=_prob_from_count(remaining_switch, state.opp_hand_count, hidden_count),
-            prob_has_energy=_prob_from_count(remaining_energy, state.opp_hand_count, hidden_count),
-            prob_has_tool=_prob_from_count(remaining_tool, state.opp_hand_count, hidden_count),
+            deck_confidence=hypothesis_tuple[0].weight if hypothesis_tuple else 0.0,
+            deck_entropy=_normalized_entropy({hypothesis.deck_id: hypothesis.weight for hypothesis in hypothesis_tuple}),
+            prob_in_hand_gust=hand_probability["gust"],
+            prob_in_hand_switch=hand_probability["switch"],
+            prob_in_hand_energy=hand_probability["energy"],
+            prob_in_hand_tool=hand_probability["tool"],
+            prob_has_gust=_access_after_draw(hand_probability["gust"], remaining_gust, hidden_count),
+            prob_has_switch=_access_after_draw(hand_probability["switch"], remaining_switch, hidden_count),
+            prob_has_energy=_access_after_draw(hand_probability["energy"], remaining_energy, hidden_count),
+            prob_has_tool=_access_after_draw(hand_probability["tool"], remaining_tool, hidden_count),
             remaining_gust_count=remaining_gust,
             remaining_switch_count=remaining_switch,
             remaining_energy_count=remaining_energy,
             remaining_tool_count=remaining_tool,
-            exhausted_gust=bool(top_deck and gust_count > 0 and remaining_gust <= 0),
-            exhausted_switch=bool(top_deck and switch_count > 0 and remaining_switch <= 0),
-            exhausted_tool=bool(top_deck and tool_count > 0 and remaining_tool <= 0),
+            exhausted_gust=_robustly_exhausted(hypothesis_tuple, lambda cid: _contains_name(cid, ("boss", "catcher", "gust"))),
+            exhausted_switch=_robustly_exhausted(hypothesis_tuple, lambda cid: _contains_name(cid, ("switch", "cart"))),
+            exhausted_tool=_robustly_exhausted(hypothesis_tuple, _is_tool_card),
             prob_can_attack_next_turn=1.0 if state.opp_active and state.opp_active.energy_count > 0 else 0.35,
             expected_damage_next_turn=damage_ceiling,
             expected_first_attack_turn=float(top_profile.get("average_first_attack_turn", 3.0)) if top_profile else 3.0,
@@ -397,15 +506,19 @@ class BeliefBuilder:
         your_prize = _pad_zone(your_prize, state.my_prizes_remaining, own_order)
 
         opponent_decklist = self.decklist
-        if opponent.top_deck_id:
+        sampled_hypothesis = opponent.deck_hypotheses[0] if opponent.deck_hypotheses else None
+        if variant > 0 and opponent.deck_hypotheses:
+            sampled_hypothesis = opponent.deck_hypotheses[variant % len(opponent.deck_hypotheses)]
+        if sampled_hypothesis is not None:
             try:
-                opponent_decklist = expand_deck(get_deck(opponent.top_deck_id, self.db))
+                opponent_decklist = expand_deck(get_deck(sampled_hypothesis.deck_id, self.db))
             except KeyError:
                 opponent_decklist = self.decklist
         opp_visible = Counter(opponent.observed_card_counts)
         opp_counts = _subtract_counts(_count_deck(opponent_decklist), opp_visible)
         opp_order = _rotated(opponent_decklist, variant)
-        opponent_hand = _take_from_counts(opp_counts, state.opp_hand_count, opp_order)
+        known_hand = list(opponent.known_hand_counts.elements())[: state.opp_hand_count]
+        opponent_hand = known_hand + _take_from_counts(opp_counts, max(0, state.opp_hand_count - len(known_hand)), opp_order)
         opponent_prize = _take_from_counts(opp_counts, state.opp_prizes_remaining, opp_order)
         opponent_deck = _take_from_counts(opp_counts, state.opp_deck_count, opp_order)
         opponent_hand = _pad_zone(opponent_hand, state.opp_hand_count, opp_order)
