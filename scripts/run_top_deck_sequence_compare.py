@@ -18,6 +18,19 @@ from pokemon_agent.deck_db import load_deck_db, observed_win_rate, observed_wins
 
 
 DEFAULT_AGENTS = ("sequence",)
+SEED_SCOPE = "Policy RNG only; the bundled cg simulator does not expose a game-RNG seed API."
+PRESETS = {
+    "full": {
+        "rounds": 5,
+        "top_n": None,
+        "description": "30 top decks x 5 rotations: 4,500 games per agent.",
+    },
+    "fast": {
+        "rounds": 3,
+        "top_n": 8,
+        "description": "8 top decks x 3 rotations: 192 games per agent.",
+    },
+}
 BASELINE_SEEDS = (
     42,
     1729,
@@ -136,20 +149,26 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run sequence baselines for each top deck against top-deck opponents.")
     parser.add_argument("--run-id", default=_run_id())
     parser.add_argument("--out-root", default=None)
-    parser.add_argument("--rounds", type=int, default=5, help="Full top-deck opponent rotations per agent deck. Default 5 => 150 games with 30 top decks.")
+    parser.add_argument("--preset", choices=tuple(PRESETS), default="full", help="Evaluation size preset. Defaults to full.")
+    parser.add_argument("--rounds", type=int, default=None, help="Override the preset's full top-deck opponent rotations per agent deck.")
     parser.add_argument("--games", type=int, default=None, help="Legacy total games per agent deck. Must be divisible by the selected top-deck count.")
     parser.add_argument("--workers", type=int, default=32)
     parser.add_argument("--min-observed-wins", type=int, default=25)
-    parser.add_argument("--top-n", type=int, default=None)
+    parser.add_argument("--top-n", type=int, default=None, help="Override the preset's top-deck count.")
     parser.add_argument("--python", default="./.venv/bin/python")
     parser.add_argument("--skip-existing", action="store_true")
-    parser.add_argument("--agents", default=",".join(DEFAULT_AGENTS), help="Comma-separated agent specs to evaluate. Default: sequence.")
-    parser.add_argument("--seed-list", default="", help="Comma-separated per-round seeds. Defaults to the first --rounds fixed baseline seeds.")
+    parser.add_argument("--agents", default=None, help="Comma-separated agent specs to evaluate. Kept for compatibility.")
+    parser.add_argument("--agent", dest="agent_specs", action="append", default=[], help="Agent spec to evaluate. Repeat this option for multiple agents; supports specs containing commas.")
+    parser.add_argument("--seed-list", default="", help="Comma-separated per-round policy seeds. Defaults to the first --rounds baseline seeds.")
+    parser.add_argument("--enable-mlp", action="store_true", help="Allow MLP ranking during evaluation. Disabled by default to preserve the sequence-only baseline.")
+    parser.add_argument("--reference-agent", default="sequence", help="Agent spec used for per-agent deltas in comparison.json. Defaults to sequence.")
     args = parser.parse_args()
 
-    out_root = Path(args.out_root or f"baseline/compare/{args.run_id}")
+    preset = PRESETS[args.preset]
+    out_root = Path(args.out_root or f"artifacts/baseline/compare/{args.run_id}")
+    top_n = preset["top_n"] if args.top_n is None else args.top_n
     db = load_deck_db()
-    decks = top_observed_winrate_decks(db, min_observed_wins=args.min_observed_wins, top_n=args.top_n)
+    decks = top_observed_winrate_decks(db, min_observed_wins=args.min_observed_wins, top_n=top_n)
     deck_records = [
         {
             "id": str(deck["id"]),
@@ -166,7 +185,7 @@ def main() -> int:
             raise ValueError(f"--games must be a positive multiple of selected deck count ({len(deck_records)})")
         rounds = args.games // len(deck_records)
     else:
-        rounds = int(args.rounds)
+        rounds = int(preset["rounds"] if args.rounds is None else args.rounds)
     if rounds <= 0:
         raise ValueError("--rounds must be positive")
     seed_schedule = tuple(int(value) for value in args.seed_list.split(",") if value.strip()) if args.seed_list else BASELINE_SEEDS[:rounds]
@@ -178,11 +197,14 @@ def main() -> int:
         raise ValueError(f"Seed schedule has {len(seed_schedule)} seeds but {rounds} rounds were requested")
     seed_schedule = seed_schedule[:rounds]
     games = rounds * len(deck_records)
-    agents = tuple(agent.strip() for agent in args.agents.split(",") if agent.strip())
+    csv_agents = tuple(agent.strip() for agent in args.agents.split(",") if agent.strip()) if args.agents else ()
+    agents = tuple((*csv_agents, *(agent.strip() for agent in args.agent_specs if agent.strip()))) or DEFAULT_AGENTS
     if not agents:
         raise ValueError("--agents cannot be empty")
     manifest = {
         "run_id": args.run_id,
+        "preset": args.preset,
+        "preset_description": preset["description"],
         "rounds_per_agent_deck": rounds,
         "games_per_agent_deck": games,
         "workers": args.workers,
@@ -190,10 +212,13 @@ def main() -> int:
         "opponent": "sequence",
         "opponent_decks": "top_winrate",
         "min_observed_wins": args.min_observed_wins,
-        "top_n": args.top_n,
+        "top_n": top_n,
         "deck_count": len(deck_records),
         "seed_schedule": list(seed_schedule),
+        "seed_scope": SEED_SCOPE,
         "round_robin_opponents": True,
+        "disable_mlp": not args.enable_mlp,
+        "reference_agent": args.reference_agent,
         "decks": deck_records,
     }
     _write_json(out_root / "manifest.json", manifest)
@@ -229,11 +254,12 @@ def main() -> int:
                     "--out-dir",
                     str(out_dir),
                     "--planner-coverage-report",
-                    "--disable-mlp",
                     "--round-robin-opponents",
                     "--seed-list",
                     ",".join(str(seed) for seed in seed_schedule),
                 ]
+                if not args.enable_mlp:
+                    cmd.append("--disable-mlp")
                 print(f"run: {agent} deck={deck_id} rounds={rounds} games={games} workers={args.workers}", flush=True)
                 subprocess.run(cmd, check=True)
             rows = _csv_rows(out_dir)
@@ -259,6 +285,12 @@ def main() -> int:
     }
     comparison = {
         "agents": by_agent,
+        "reference_agent": args.reference_agent,
+        "pooled_win_rate_deltas_vs_reference": {
+            agent: aggregate["pooled_win_rate"] - by_agent[args.reference_agent]["pooled_win_rate"]
+            for agent, aggregate in by_agent.items()
+            if agent != args.reference_agent and args.reference_agent in by_agent
+        },
         "pooled_win_rate_delta_sequence_minus_previous_best": (
             by_agent["sequence"]["pooled_win_rate"] - by_agent["sequence-starmie-froslass"]["pooled_win_rate"]
             if "sequence" in by_agent and "sequence-starmie-froslass" in by_agent and all(by_agent.values())

@@ -333,7 +333,7 @@ def main() -> None:
     parser.add_argument("--decision-log", action="store_true", help="Write structured per-decision JSONL diagnostics.")
     parser.add_argument("--num-hidden-samples", type=int, default=1)
     parser.add_argument("--workers", type=int, default=1, help="Run games across this many worker processes.")
-    parser.add_argument("--seed-list", default="", help="Comma-separated deterministic per-round seeds. The first seed is used for the first opponent rotation.")
+    parser.add_argument("--seed-list", default="", help="Comma-separated per-round policy seeds. The first seed is used for the first opponent rotation; the bundled simulator has no game-RNG seed API.")
     parser.add_argument("--round-robin-opponents", action="store_true", help="Cycle opponent decks in exact pool order and alternate side by full opponent rotation.")
     args = parser.parse_args()
     sequence_options = {

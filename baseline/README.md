@@ -1,46 +1,61 @@
-# Baseline System
+# Baselines
 
-This directory defines the local baseline system for evaluating Pokemon-Agent changes before submitting to Kaggle.
+This directory holds the durable evaluation contract. Generated runs belong in
+`artifacts/baseline/compare/`, not here.
 
-The goal is to make agent changes comparable across runs. A useful baseline run answers four questions:
+## Ground truth
 
-1. Does the agent still satisfy basic runtime and packaging contracts?
-2. Does it beat weak local opponents reliably?
-3. Does it stay robust when opponent decks are rotated through the local deck database?
-4. Does its local score move in a direction that is likely to improve Kaggle performance?
+[`ground_truth/20260708T021405Z`](ground_truth/20260708T021405Z/) is the
+historical general-agent reference:
 
-Use these files together:
+- `sequence` versus round-robin `sequence` over 30 replay-observed top decks.
+- Each self deck played 100 games: 3,000 total games.
+- 1,571 wins, 1,429 losses, 0 invalid actions: **52.3667% win rate**.
 
-- `baselines.md`: the baseline agents, opponent pools, and gates to compare against.
-- `testing.md`: the command sequence and reporting format for running a baseline evaluation.
-- `kaggle_proxy.md`: the local proxy score definition and how to interpret it.
+This result demonstrates cross-deck robustness. It is a pinned historical
+reference, not a seed-identical rerun target: its run did not record a seed
+schedule.
 
-## Default Baseline Suite
+## Evaluation levels
 
-Run this suite before claiming an agent improvement:
+Run the smoke test before any evaluator run:
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.tests_smoke
-./.venv/bin/python -m pokemon_agent.eval --agent sequence --opponent random --games 100 --out-dir artifacts/baseline/current
-./.venv/bin/python -m pokemon_agent.eval --agent sequence --opponent random --games 100 --opponent-decks deck_db --out-dir artifacts/baseline/current
-./.venv/bin/python -m pokemon_agent.eval --agent sequence --opponent heuristic --games 100 --out-dir artifacts/baseline/current
-./.venv/bin/python -m pokemon_agent.submission --output artifacts/baseline/current/submission.tar.gz
 ```
 
-Run the standardized top-deck sequence matrix before treating a sequence-policy change as strong. By default this evaluates `sequence` with each top observed-winrate deck against a round-robin `sequence` top-winrate opponent pool for 5 full rotations: 30 self decks x 150 games = 4500 total games.
+Use the fast top-deck screen while iterating. It evaluates each agent over the
+same top-8 deck matrix for three full rotations (192 games per agent), with
+policy seeds `42, 1729, 8675309`:
 
 ```bash
-./.venv/bin/python scripts/run_top_deck_sequence_compare.py
+./.venv/bin/python scripts/run_top_deck_sequence_compare.py \
+  --preset fast \
+  --agent sequence \
+  --agent '<candidate-agent-spec>'
 ```
 
-The top-deck runner uses fixed per-round seeds by default, starting with `42`, and caps the schedule at 30 rounds/seeds.
+`comparison.json` reports each candidate's pooled win-rate delta against
+`sequence`. Fast results reject clear regressions only; they do not establish
+an improvement.
 
-For quick iteration, use 24 games per evaluation. For decision-making, use at least 100 games per matchup. For final candidate selection, prefer 300+ games per matchup when time allows.
+Use the full matrix to promote a sequence-policy change. It is 30 top decks by
+five rotations: 4,500 games per agent, using the first five policy seeds.
 
-## Baseline Principles
+```bash
+./.venv/bin/python scripts/run_top_deck_sequence_compare.py \
+  --preset full \
+  --agent sequence \
+  --agent '<candidate-agent-spec>'
+```
 
-- Always compare against the same config and deck unless the experiment is explicitly about deck selection.
-- Always report invalid actions. A higher win rate with invalid actions is not a clean improvement.
-- Prefer deck-db rotation over mirror-only results when estimating Kaggle movement.
-- Treat one short run as a signal, not proof. Repeat promising changes with more games.
-- Preserve raw JSONL and CSV outputs under `artifacts/baseline/<run-name>/`.
+MLP ranking is deliberately disabled for the sequence-only baseline. Add
+`--enable-mlp` when an MLP candidate is intentionally being evaluated.
+
+The bundled simulator does not expose a game-RNG seed API, so the seed schedule
+controls policy randomness and deck rotation only. Re-run close results before
+making a decision; do not describe this protocol as fully deterministic.
+
+Every promoted run must report its commit, agent spec, preset, seed schedule,
+pooled and mean-deck win rate, and invalid-action count. A nonzero invalid
+action count fails the run.
