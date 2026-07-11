@@ -15,7 +15,7 @@ plan:
 
 evaluate:
   candidate sequences and resulting simulated states
-  -> linear sequence score + MLP ranker score + value guardrail features
+  -> linear sequence score + optional MLP or root-ranker score + value guardrail features
 
 act:
   scored candidates
@@ -60,6 +60,45 @@ Run the batch validation/package flow:
 ```bash
 ./scripts/train_clean_models.sh
 ```
+
+## Immediate-Root XGBoost Ranker
+
+The optional root ranker learns which immediate action root an expert selected. Replay preparation canonicalizes each `first_selection`, retains one base-scored sequence per root, and caps the selectable group at the first 24 roots. At inference, XGBoost reranks that same selectable set. Deduplicated roots outside the cap remain guardrail-only so the linear fallback can still override an unsafe learned choice; they are never made selectable by the model.
+
+The offline experiment uses native XGBoost for training, but the shipped model is the compact JSON artifact at `pokemon_agent/models/xgb_root_v1.json`. Runtime loading and inference for that artifact do not require the `xgboost` package. Root ranking requires `num_hidden_samples=1` and is mutually exclusive with MLP ranking.
+
+Generate deterministic replay splits, root labels, and a native training model with:
+
+```bash
+./.venv/bin/python -m pokemon_agent.xgb_root_ranker manifest \
+  --high-elo-manifest <high_elo_manifest.csv> \
+  --output artifacts/xgb_root_v1/replay_manifest.json
+
+./.venv/bin/python -m pokemon_agent.xgb_root_ranker prepare-labels \
+  --manifest artifacts/xgb_root_v1/replay_manifest.json \
+  --output-dir artifacts/xgb_root_v1/labels \
+  --workers 32
+
+./.venv/bin/python -m pokemon_agent.xgb_root_ranker train \
+  --train-labels artifacts/xgb_root_v1/labels/train.jsonl \
+  --validation-labels artifacts/xgb_root_v1/labels/validation.jsonl \
+  --test-labels artifacts/xgb_root_v1/labels/test.jsonl \
+  --output-dir artifacts/xgb_root_v1/model_fixed_v1
+```
+
+Use and package the compact runtime model with:
+
+```bash
+./.venv/bin/python -m pokemon_agent.eval \
+  --agent 'sequence-xgb:pokemon_agent/models/xgb_root_v1.json' \
+  --opponent sequence --games 150
+
+./.venv/bin/python -m pokemon_agent.submission \
+  --xgb-model pokemon_agent/models/xgb_root_v1.json \
+  --output artifacts/submission/xgb_root_v1_submission.tar.gz
+```
+
+The frozen 30-deck, five-rotation full matrix completed 4,500 games per agent with zero invalid actions. The compact-equivalent root policy scored 61.07% versus 50.29% for `sequence`, a paired improvement of 10.78 percentage points (paired-game 95% CI 8.89 to 12.66; deck-cluster 95% CI 6.31 to 15.24). It improved 22 of 30 agent decks.
 
 ## Full-Schema MLP Ranking Training
 

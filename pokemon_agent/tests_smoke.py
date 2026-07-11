@@ -11,6 +11,7 @@ import tarfile
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 from .belief import OpponentTracker, PrizeTracker
 from .actions import ActionView, legal_actions, sanitize_selection
@@ -19,6 +20,7 @@ from .acting.guardrails import FallbackGuardrail
 from .decision_engine import DecisionEngine
 from .decision_types import ScoreBreakdown, ScoredCandidate
 from .evaluation.counterplay_model import CounterplayModel
+from .evaluation.scoring import SequenceEvaluator
 from .deck_db import archetype_gameplan_profiles, deck_gameplan_profile, iter_decks, load_deck_db, rank_decks_by_observed_cards, validate_deck
 from .engine import run_episode
 from .eval import _opponent_deck_pool
@@ -29,6 +31,7 @@ from .opponent_memory import OpponentMemory, ResponseOpportunity
 from .probability import ProbabilityModel, hypergeometric_at_least_one, hypergeometric_pmf
 from .planning.pruning import SequencePruner
 from .replay_pipeline import (
+    _root_ranker_candidates,
     build_candidate_coverage_dataset,
     build_label_dataset,
     compact_label_dataset,
@@ -47,6 +50,8 @@ ensure_cg_path()
 
 from cg.api import to_observation_class  # noqa: E402
 from cg.game import battle_finish, battle_start  # noqa: E402
+
+XGB_COMPACT_MODEL = Path(__file__).resolve().parent / "models" / "xgb_root_v1.json"
 
 
 def test_action_state_reward_smoke() -> None:
@@ -94,8 +99,10 @@ def test_submission_smoke() -> None:
         assert path.stat().st_size > 0
         with tarfile.open(path, "r:gz") as tar:
             names = set(tar.getnames())
+            runtime_config = json.loads(tar.extractfile("runtime_config.json").read().decode("utf-8"))  # type: ignore[union-attr]
         assert "data/deck_db/decks.json" in names
         assert "configs/starmie_froslass.json" in names
+        assert "xgb_model_file" not in runtime_config
         extract_dir = Path(tmp) / "extract"
         extract_dir.mkdir()
         with tarfile.open(path, "r:gz") as tar:
@@ -569,14 +576,26 @@ def _fake_scored_candidate(
     score: float,
     linear: float,
     mlp: float | None = None,
+    xgb: float | None = None,
     features: dict[str, float] | None = None,
 ) -> ScoredCandidate:
     return ScoredCandidate(
         candidate=SimpleNamespace(first_selection=selected, steps=()),
         features=features or {},
         score=score,
-        components=ScoreBreakdown(linear=linear, mlp=mlp),
+        components=ScoreBreakdown(linear=linear, mlp=mlp, xgb=xgb),
     )
+
+
+class _MockXGBRootRanker:
+    def __init__(self) -> None:
+        self.validated_schema: str | None = None
+
+    def validate_feature_schema(self, schema: str) -> None:
+        self.validated_schema = schema
+
+    def score_batch(self, candidates: list[dict[str, float]]) -> list[float]:
+        return [float(features.get("xgb_preference", 0.0)) for features in candidates]
 
 
 def test_fallback_guardrail_does_not_apply_linear_margin_to_mlp_scores() -> None:
@@ -622,6 +641,215 @@ def test_fallback_guardrail_respects_large_mlp_preference() -> None:
 
     assert not use_fallback
     assert reason is None
+
+
+def test_xgb_root_ranking_dedupes_and_can_change_base_best() -> None:
+    from .xgb_root_ranker import dedupe_scored_roots
+
+    base_best = _fake_scored_candidate([2], score=10.0, linear=10.0, features={"xgb_preference": 0.0})
+    duplicate = _fake_scored_candidate([2], score=9.0, linear=9.0, features={"xgb_preference": 100.0})
+    alternate = _fake_scored_candidate([4, 3], score=8.0, linear=8.0, features={"xgb_preference": 5.0})
+    deduped = list(dedupe_scored_roots([base_best, duplicate, alternate]))
+    assert deduped == [base_best, alternate]
+
+    evaluator = object.__new__(SequenceEvaluator)
+    evaluator.xgb_ranker = _MockXGBRootRanker()
+    reranked, guardrail_ranked, diagnostics = evaluator._rerank_roots_with_xgb([base_best, duplicate, alternate])
+    assert [candidate.candidate.first_selection for candidate in reranked] == [[4, 3], [2]]
+    assert guardrail_ranked == reranked
+    assert reranked[0].score == 5.0
+    assert reranked[0].components.xgb == 5.0
+    assert reranked[0].features["xgb_score"] == 5.0
+    assert diagnostics["duplicate_root_candidates_removed"] == 1
+    assert diagnostics["base_best_first_selection"] == [2]
+    assert diagnostics["xgb_best_first_selection"] == [3, 4]
+    assert diagnostics["xgb_changed_root"] is True
+
+    many_roots = [
+        _fake_scored_candidate(
+            [index],
+            score=float(100 - index),
+            linear=1000.0 if index == 24 else float(100 - index),
+            features={"xgb_preference": float(index) if index < 24 else 23.0},
+        )
+        for index in range(25)
+    ]
+    capped, guardrail_ranked, diagnostics = evaluator._rerank_roots_with_xgb(many_roots)
+    assert len(capped) == 24
+    assert all(candidate.candidate.first_selection != [24] for candidate in capped)
+    outside_cap_fallback = next(
+        candidate for candidate in guardrail_ranked if candidate.candidate.first_selection == [24]
+    )
+    assert outside_cap_fallback not in capped
+    assert diagnostics["deduped_root_count"] == 25
+    assert diagnostics["root_candidate_count"] == 24
+    assert diagnostics["roots_outside_cap"] == 1
+    assert diagnostics["duplicate_root_candidates_removed"] == 0
+    assert diagnostics["guardrail_root_count"] == 25
+    assert diagnostics["outside_cap_guardrail_root_count"] == 1
+
+    use_fallback, reason = FallbackGuardrail().should_use_fallback(
+        capped[0],
+        guardrail_ranked,
+        [24],
+    )
+    assert use_fallback
+    assert reason == "fallback_linear_margin_xgb_guardrail"
+
+
+def test_xgb_guardrail_uses_canonical_fallback_and_zero_disagreement() -> None:
+    guardrail = FallbackGuardrail()
+    chosen = _fake_scored_candidate([0], score=1.0, linear=1200.0, xgb=1.0)
+    fallback = _fake_scored_candidate([4, 3], score=1.0, linear=1600.0, xgb=1.0)
+    use_fallback, reason = guardrail.should_use_fallback(chosen, [chosen, fallback], [3, 4])
+    assert use_fallback
+    assert reason == "fallback_linear_margin_xgb_guardrail"
+
+    preferred = replace(chosen, score=2.0, components=replace(chosen.components, xgb=2.0))
+    use_fallback, reason = guardrail.should_use_fallback(preferred, [preferred, fallback], [3, 4])
+    assert not use_fallback
+    assert reason is None
+
+
+def test_sequence_xgb_policy_loader_and_constraints() -> None:
+    config = load_config()
+    deck = read_deck(config=config)
+    ranker = _MockXGBRootRanker()
+    with patch("pokemon_agent.xgb_root_ranker.load_root_ranker", return_value=ranker) as loader:
+        policy = make_policy("sequence-xgb:/tmp/mock-xgb", config=config, deck=deck, seed=17)
+    loader.assert_called_once_with("/tmp/mock-xgb")
+    assert isinstance(policy, SequencePolicy)
+    assert policy.engine.evaluator.xgb_ranker is ranker
+    assert ranker.validated_schema == "full"
+
+    try:
+        SequencePolicy(config=config, deck=deck, xgb_ranker=ranker, mlp_ranker=object())
+    except ValueError as exc:
+        assert "cannot be enabled together" in str(exc)
+    else:
+        raise AssertionError("Expected MLP+XGB rejection")
+    try:
+        SequencePolicy(config=config, deck=deck, xgb_ranker=ranker, num_hidden_samples=2)
+    except ValueError as exc:
+        assert "num_hidden_samples=1" in str(exc)
+    else:
+        raise AssertionError("Expected hidden-sample rejection")
+
+
+def test_compact_xgb_policy_and_submission_smoke() -> None:
+    assert XGB_COMPACT_MODEL.is_file(), XGB_COMPACT_MODEL
+    config = load_config()
+    deck = read_deck(config=config)
+    policy = make_policy(f"sequence-xgb:{XGB_COMPACT_MODEL}", config=config, deck=deck, seed=29)
+    assert isinstance(policy, SequencePolicy)
+    assert policy.engine.evaluator.xgb_ranker is not None
+    compact_scores = policy.engine.evaluator.xgb_ranker.score_batch([{}])
+    assert len(compact_scores) == 1
+    assert math.isfinite(float(compact_scores[0]))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        bundled = build_submission(
+            xgb_model_path=str(XGB_COMPACT_MODEL),
+            output=str(tmp_path / "xgb_submission.tar.gz"),
+        )
+        with tarfile.open(bundled, "r:gz") as tar:
+            names = set(tar.getnames())
+            runtime_config = json.loads(tar.extractfile("runtime_config.json").read().decode("utf-8"))  # type: ignore[union-attr]
+            assert "xgb_model.json" in names
+            assert runtime_config["xgb_model_file"] == "xgb_model.json"
+            assert runtime_config["mlp_enabled"] is False
+            assert runtime_config["mlp_model_file"] is None
+            extract_dir = tmp_path / "extract"
+            extract_dir.mkdir()
+            tar.extractall(extract_dir, filter="data")
+        check = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import builtins, pathlib, sys; "
+                    "real_import = builtins.__import__; "
+                    "builtins.__import__ = lambda name, *args, **kwargs: "
+                    "(_ for _ in ()).throw(AssertionError('native xgboost import')) "
+                    "if name.split('.')[0] == 'xgboost' else real_import(name, *args, **kwargs); "
+                    "sys.path.insert(0, sys.argv[1]); "
+                    "import main; "
+                    "from cg.game import battle_finish, battle_start; "
+                    "deck = [int(value) for value in (pathlib.Path(sys.argv[1]) / 'deck.csv').read_text().splitlines()]; "
+                    "obs, _ = battle_start(deck, deck); "
+                    "selected = main.agent(obs); "
+                    "assert isinstance(selected, list) and selected; "
+                    "battle_finish()"
+                ),
+                str(extract_dir),
+            ],
+            cwd=Path.cwd(),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert check.returncode == 0, check.stderr
+
+        invalid_runtime_config = dict(runtime_config)
+        invalid_runtime_config["mlp_enabled"] = True
+        (extract_dir / "runtime_config.json").write_text(
+            json.dumps(invalid_runtime_config),
+            encoding="utf-8",
+        )
+        runtime_conflict = subprocess.run(
+            [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import main", str(extract_dir)],
+            cwd=Path.cwd(),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert runtime_conflict.returncode != 0
+        assert "cannot be enabled together" in runtime_conflict.stderr
+
+        try:
+            build_submission(
+                mlp_model_path=str(XGB_COMPACT_MODEL),
+                xgb_model_path=str(XGB_COMPACT_MODEL),
+                output=str(tmp_path / "invalid_submission.tar.gz"),
+            )
+        except ValueError as exc:
+            assert "cannot be packaged together" in str(exc)
+        else:
+            raise AssertionError("Expected MLP+XGB submission rejection")
+
+        cli = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pokemon_agent.submission",
+                "--mlp-model",
+                str(XGB_COMPACT_MODEL),
+                "--xgb-model",
+                str(XGB_COMPACT_MODEL),
+            ],
+            cwd=Path.cwd(),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert cli.returncode != 0
+        assert "mutually exclusive" in cli.stderr
+
+
+def test_sequence_xgb_policy_episode_smoke() -> None:
+    config = load_config()
+    deck = read_deck(config=config)
+    result = run_episode(
+        SequencePolicy(config=config, deck=deck, xgb_ranker=_MockXGBRootRanker(), seed=23),
+        RandomPolicy(seed=24),
+        deck,
+        deck,
+        config=config,
+        max_steps=200,
+    )
+    assert result.steps > 0
+    assert result.invalid_actions == 0
 
 
 def test_compact_label_dataset_filters_passive_end_labels() -> None:
@@ -695,6 +923,51 @@ def test_compact_label_dataset_filters_passive_end_labels() -> None:
         filtered = compact_label_dataset(str(labels_path), output=str(filtered_path), exclude_passive_end_labels=True)
         assert filtered["output_records"] == 2
         assert filtered["skipped_passive_end_label"] == 1
+
+
+def test_root_ranker_candidates_dedupes_before_cap_without_expert_injection() -> None:
+    def sequence(selected: tuple[int, ...], score: float) -> SimpleNamespace:
+        return SimpleNamespace(first_selection=list(selected), score=score)
+
+    sequences = [
+        sequence((2,), 10.0),
+        sequence((2,), 9.0),
+        sequence((4, 3), 8.0),
+        sequence((7,), 7.0),
+    ]
+    kept, label_index, diagnostics = _root_ranker_candidates(sequences, [3, 4], 2)
+    assert [candidate.first_selection for candidate in kept] == [[2], [4, 3]]
+    assert label_index == 1
+    assert diagnostics == {
+        "duplicate_roots_removed": 1,
+        "single_root_groups": 0,
+        "expert_root_available": 1,
+        "expert_root_outside_cap": 0,
+    }
+    reordered, reordered_label, _ = _root_ranker_candidates(list(reversed(sequences)), [3, 4], 2)
+    assert [candidate.first_selection for candidate in reordered] == [[2], [4, 3]]
+    assert reordered_label == label_index
+
+    kept, label_index, diagnostics = _root_ranker_candidates(sequences, [7], 2)
+    assert [candidate.first_selection for candidate in kept] == [[2], [4, 3]]
+    assert label_index == -1
+    assert diagnostics["expert_root_available"] == 1
+    assert diagnostics["expert_root_outside_cap"] == 1
+
+    kept, label_index, diagnostics = _root_ranker_candidates([sequence((5,), 1.0), sequence((5,), 0.0)], [9], 4)
+    assert [candidate.first_selection for candidate in kept] == [[5]]
+    assert label_index == -1
+    assert diagnostics["single_root_groups"] == 1
+    assert diagnostics["expert_root_available"] == 0
+
+    cli = subprocess.run(
+        [sys.executable, "-m", "pokemon_agent.replay_pipeline", "root-labels", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert cli.returncode == 0
+    assert "one score-ordered candidate per canonical first-action root" in cli.stdout
 
 
 def test_decision_engine_warm_start_reuses_valid_remainder() -> None:
@@ -1209,7 +1482,12 @@ def main() -> None:
     test_fallback_guardrail_does_not_apply_linear_margin_to_mlp_scores()
     test_fallback_guardrail_can_still_use_strong_linear_fallback_with_mlp()
     test_fallback_guardrail_respects_large_mlp_preference()
+    test_xgb_root_ranking_dedupes_and_can_change_base_best()
+    test_xgb_guardrail_uses_canonical_fallback_and_zero_disagreement()
+    test_sequence_xgb_policy_loader_and_constraints()
+    test_compact_xgb_policy_and_submission_smoke()
     test_compact_label_dataset_filters_passive_end_labels()
+    test_root_ranker_candidates_dedupes_before_cap_without_expert_injection()
     test_decision_engine_warm_start_reuses_valid_remainder()
     test_decision_engine_warm_start_clears_on_action_mismatch()
     test_prize_tracker_deck_reveal_infers_known_prizes()
@@ -1218,6 +1496,7 @@ def main() -> None:
     test_sequence_ablation_switches()
     test_hidden_sample_planning_diagnostics()
     test_sequence_policy_episode_smoke()
+    test_sequence_xgb_policy_episode_smoke()
     test_replay_pipeline_smoke()
     test_raw_agent_policy_loads_sample()
     test_top_replay_planner_candidate_coverage()

@@ -214,6 +214,8 @@ class SequencePolicy(Policy):
         deck: list[int] | None = None,
         mlp_ranker: MLPSequenceRanker | None = None,
         mlp_model_path: str | Path | None = None,
+        xgb_ranker: Any | None = None,
+        xgb_model_path: str | Path | None = None,
         linear_score_weight: float | None = None,
         mlp_score_weight: float | None = None,
         clean_evaluator: bool = False,
@@ -232,6 +234,14 @@ class SequencePolicy(Policy):
         self.deck = deck or read_deck(config=self.config)
         if mlp_ranker is None and mlp_model_path is not None:
             mlp_ranker = MLPSequenceRanker.from_file(mlp_model_path)
+        if xgb_ranker is None and xgb_model_path is not None:
+            from .xgb_root_ranker import load_root_ranker
+
+            xgb_ranker = load_root_ranker(xgb_model_path)
+        if xgb_ranker is not None and mlp_ranker is not None:
+            raise ValueError("MLP and XGB rankers cannot be enabled together")
+        if xgb_ranker is not None and int(num_hidden_samples) != 1:
+            raise ValueError("XGB root ranking requires num_hidden_samples=1")
         if linear_score_weight is None:
             linear_score_weight = 0.0 if mlp_ranker is not None and mlp_enabled else 1.0
         if mlp_score_weight is None:
@@ -241,6 +251,7 @@ class SequencePolicy(Policy):
             config=self.config,
             weights=weights,
             mlp_ranker=mlp_ranker,
+            xgb_ranker=xgb_ranker,
             linear_score_weight=linear_score_weight,
             mlp_score_weight=mlp_score_weight,
             clean_evaluator=clean_evaluator,
@@ -316,6 +327,18 @@ def make_policy(
     if spec.startswith("sequence:"):
         cfg = config or load_config()
         return SequencePolicy(weights=load_weights(spec.split(":", 1)[1]), config=cfg, deck=deck or read_deck(config=cfg), seed=seed, **sequence_options)
+    if spec.startswith("sequence-xgb:"):
+        cfg = config or load_config()
+        model_path = spec.split(":", 1)[1]
+        if not model_path:
+            raise ValueError("Expected sequence-xgb:<model_path>")
+        return SequencePolicy(
+            xgb_model_path=model_path,
+            config=cfg,
+            deck=deck or read_deck(config=cfg),
+            seed=seed,
+            **sequence_options,
+        )
     if spec.startswith("sequence-mlp:"):
         cfg = config or load_config()
         payload = spec.split(":", 1)[1]

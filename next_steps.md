@@ -1,16 +1,23 @@
 # Next Steps
 
-Ideas from the research report that look like useful additions to the current architecture, but have not been tried yet.
+Ideas from the research report that look like useful additions to the current architecture. Completed experiments are recorded separately so the remaining priority list stays actionable.
+
+## Completed Experiments
+
+### Grouped Immediate-Root Ranker
+
+Promoted as an opt-in policy after a frozen 30-deck, five-rotation evaluation. The compact XGBoost-equivalent runtime achieved 61.07% versus 50.29% for `sequence` over 4,500 games per arm, with zero invalid actions and a paired improvement of 10.78 percentage points (95% CI 8.89 to 12.66).
+
+The retained design ranks canonical immediate action roots rather than full sequence variants. Native XGBoost is used only for offline training; production inference uses the checked-in compact JSON model and a dependency-free loader. Linear guardrails can still select a safety fallback outside the model's 24-root selectable cap.
 
 ## Priority Order
 
-1. Add richer decision logging.
-2. Train a grouped candidate ranker baseline.
-3. Add structured critique reason codes.
-4. Add local replay retrieval features.
-5. Replace the heuristic value proxy with a calibrated value model.
-6. Add opponent-belief confidence and a robust/exploit gate.
-7. Try root-level opponent response search.
+1. Add structured critique reason codes.
+2. Expand decision logging around ranker/guardrail disagreements.
+3. Add local replay retrieval features.
+4. Replace the heuristic value proxy with a calibrated value model.
+5. Add opponent-belief confidence and a robust/exploit gate.
+6. Try root-level opponent response search.
 
 ## Ideas To Try
 
@@ -29,17 +36,6 @@ Add a stable JSONL schema for every decision:
 - terminal outcome or later reward
 
 This should come first because it feeds retrieval, ranking, value training, and critique labels.
-
-### Grouped Candidate Ranker
-
-Train a LightGBM or XGBoost style ranker offline using each decision as one query group and candidate sequences as ranked items. Keep this as an experiment first; only consider runtime packaging if the dependency/runtime cost is worth it.
-
-Useful labels:
-
-- expert action from replay labels
-- stronger-search top action
-- self-play return
-- pairwise preference between candidates from the same decision
 
 ### Structured Critique
 

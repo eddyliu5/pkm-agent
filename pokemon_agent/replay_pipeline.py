@@ -688,6 +688,7 @@ def build_label_dataset(
     clean_evaluator: bool = False,
     multi_self_decks: bool = True,
     workers: int = 1,
+    root_ranker_mode: bool = False,
 ) -> dict[str, Any]:
     if workers > 1:
         return _build_label_dataset_parallel(
@@ -705,6 +706,7 @@ def build_label_dataset(
             clean_evaluator=clean_evaluator,
             multi_self_decks=multi_self_decks,
             workers=workers,
+            root_ranker_mode=root_ranker_mode,
         )
     return _build_label_dataset_serial(
         inputs,
@@ -720,6 +722,7 @@ def build_label_dataset(
         time_budget_ms=time_budget_ms,
         clean_evaluator=clean_evaluator,
         multi_self_decks=multi_self_decks,
+        root_ranker_mode=root_ranker_mode,
         print_summary=True,
     )
 
@@ -730,8 +733,9 @@ def _label_stats(
     *,
     clean_evaluator: bool,
     multi_self_decks: bool,
+    root_ranker_mode: bool = False,
 ) -> dict[str, Any]:
-    return {
+    stats = {
         "inputs": inputs,
         "output": str(output),
         "examples": 0,
@@ -745,6 +749,61 @@ def _label_stats(
         "replay_decks_unknown": 0,
         "replay_decks_missing": 0,
     }
+    if root_ranker_mode:
+        stats.update(
+            {
+                "root_ranker_mode": True,
+                "duplicate_roots_removed": 0,
+                "single_root_groups": 0,
+                "expert_root_available": 0,
+                "expert_root_outside_cap": 0,
+            }
+        )
+    return stats
+
+
+def _root_ranker_candidates(
+    sequences: list[Any],
+    selected: list[int],
+    max_candidates: int,
+) -> tuple[list[Any], int, dict[str, int]]:
+    """Return one score-ordered candidate per canonical root without expert injection."""
+
+    if max_candidates <= 0:
+        raise ValueError("root-ranker max_candidates must be positive")
+    ordered = sorted(
+        sequences,
+        key=lambda sequence: (
+            -float(sequence.score),
+            len(getattr(sequence, "steps", ())),
+            tuple(tuple(step.selected_indices) for step in getattr(sequence, "steps", ())),
+        ),
+    )
+    unique: list[Any] = []
+    seen: set[tuple[int, ...]] = set()
+    for sequence in ordered:
+        key = _selection_match_key(sequence.first_selection)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(sequence)
+
+    selected_key = _selection_match_key(selected)
+    expert_index = next(
+        (index for index, sequence in enumerate(unique) if _selection_match_key(sequence.first_selection) == selected_key),
+        -1,
+    )
+    cap = int(max_candidates)
+    kept = unique[:cap]
+    expert_outside_cap = expert_index >= cap and expert_index >= 0
+    label_index = expert_index if 0 <= expert_index < len(kept) else -1
+    diagnostics = {
+        "duplicate_roots_removed": len(sequences) - len(unique),
+        "single_root_groups": int(len(unique) == 1),
+        "expert_root_available": int(expert_index >= 0),
+        "expert_root_outside_cap": int(expert_outside_cap),
+    }
+    return kept, label_index, diagnostics
 
 
 def _build_label_dataset_serial(
@@ -762,6 +821,7 @@ def _build_label_dataset_serial(
     time_budget_ms: int = 1000,
     clean_evaluator: bool = False,
     multi_self_decks: bool = True,
+    root_ranker_mode: bool = False,
     print_summary: bool = False,
 ) -> dict[str, Any]:
     config = load_config(config_path)
@@ -795,7 +855,13 @@ def _build_label_dataset_serial(
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    stats = _label_stats(inputs, output_path, clean_evaluator=clean_evaluator, multi_self_decks=multi_self_decks)
+    stats = _label_stats(
+        inputs,
+        output_path,
+        clean_evaluator=clean_evaluator,
+        multi_self_decks=multi_self_decks,
+        root_ranker_mode=root_ranker_mode,
+    )
     with output_path.open("w", encoding="utf-8") as fh:
         for decision in iter_replay_decisions(inputs, min_rating=min_rating):
             if max_examples is not None and stats["examples"] >= max_examples:
@@ -827,14 +893,19 @@ def _build_label_dataset_serial(
                 stats["candidate_errors"] += 1
                 continue
             sequences.sort(key=lambda sequence: sequence.score, reverse=True)
-            selected_key = _selection_match_key(selected)
-            label_index = next((index for index, sequence in enumerate(sequences) if _selection_match_key(sequence.first_selection) == selected_key), -1)
-            kept = sequences[:max_candidates]
-            if label_index >= max_candidates:
-                kept = kept[:-1] + [sequences[label_index]]
-                label_index = len(kept) - 1
-            elif label_index >= 0:
+            if root_ranker_mode:
+                kept, label_index, root_diagnostics = _root_ranker_candidates(sequences, selected, max_candidates)
+                for key, value in root_diagnostics.items():
+                    stats[key] += value
+            else:
+                selected_key = _selection_match_key(selected)
+                label_index = next((index for index, sequence in enumerate(sequences) if _selection_match_key(sequence.first_selection) == selected_key), -1)
                 kept = sequences[:max_candidates]
+                if label_index >= max_candidates:
+                    kept = kept[:-1] + [sequences[label_index]]
+                    label_index = len(kept) - 1
+                elif label_index >= 0:
+                    kept = sequences[:max_candidates]
             record = {
                 "source": decision.source,
                 "episode_id": decision.episode_id,
@@ -846,6 +917,8 @@ def _build_label_dataset_serial(
                 "matched": label_index >= 0,
                 "candidates": [_candidate_record(sequence) for sequence in kept],
             }
+            if root_ranker_mode:
+                record["root_ranker_mode"] = True
             record.update(_deck_metadata("self", resolved_deck))
             record.update(_deck_metadata("opponent", opponent_resolved))
             fh.write(json.dumps(record, sort_keys=True) + "\n")
@@ -869,8 +942,13 @@ def _merge_label_stats(
         "replay_decks_matched_db",
         "replay_decks_unknown",
         "replay_decks_missing",
+        "duplicate_roots_removed",
+        "single_root_groups",
+        "expert_root_available",
+        "expert_root_outside_cap",
     ):
-        base[key] = int(base.get(key, 0)) + int(shard.get(key, 0))
+        if key in base or key in shard:
+            base[key] = int(base.get(key, 0)) + int(shard.get(key, 0))
 
 
 def _build_label_shard(args: dict[str, Any]) -> dict[str, Any]:
@@ -888,6 +966,7 @@ def _build_label_shard(args: dict[str, Any]) -> dict[str, Any]:
         time_budget_ms=args["time_budget_ms"],
         clean_evaluator=args["clean_evaluator"],
         multi_self_decks=args["multi_self_decks"],
+        root_ranker_mode=args["root_ranker_mode"],
         print_summary=False,
     )
     stats["shard_index"] = args["shard_index"]
@@ -910,13 +989,20 @@ def _build_label_dataset_parallel(
     clean_evaluator: bool,
     multi_self_decks: bool,
     workers: int,
+    root_ranker_mode: bool,
 ) -> dict[str, Any]:
     if max_examples is not None:
         raise ValueError("--workers cannot be combined with --max-examples because examples are split by replay file.")
     files = [str(path) for path in _iter_files(inputs)]
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    stats = _label_stats(inputs, output_path, clean_evaluator=clean_evaluator, multi_self_decks=multi_self_decks)
+    stats = _label_stats(
+        inputs,
+        output_path,
+        clean_evaluator=clean_evaluator,
+        multi_self_decks=multi_self_decks,
+        root_ranker_mode=root_ranker_mode,
+    )
     stats["workers"] = workers
     stats["input_files"] = len(files)
     if not files:
@@ -942,6 +1028,7 @@ def _build_label_dataset_parallel(
                     "time_budget_ms": time_budget_ms,
                     "clean_evaluator": clean_evaluator,
                     "multi_self_decks": multi_self_decks,
+                    "root_ranker_mode": root_ranker_mode,
                 }
             )
         completed: dict[int, dict[str, Any]] = {}
@@ -1872,6 +1959,26 @@ def main() -> None:
     ranking_labels.add_argument("--single-config", action="store_true", help="Ignore replay-submitted decks and use only --config.")
     ranking_labels.add_argument("--workers", type=int, default=1, help="Generate labels across replay files with this many worker processes.")
 
+    root_labels = sub.add_parser(
+        "root-labels",
+        help="Build one score-ordered candidate per canonical first-action root.",
+        description="Build one score-ordered candidate per canonical first-action root.",
+    )
+    root_labels.add_argument("inputs", nargs="+")
+    root_labels.add_argument("--output", default="artifacts/replay_labels/root_ranking_labels.jsonl")
+    root_labels.add_argument("--config", default=None)
+    root_labels.add_argument("--weights", default=None)
+    root_labels.add_argument("--min-rating", type=float, default=None)
+    root_labels.add_argument("--max-examples", type=int, default=None)
+    root_labels.add_argument("--max-candidates", type=int, default=24)
+    root_labels.add_argument("--beam-width", type=int, default=16)
+    root_labels.add_argument("--max-depth", type=int, default=10)
+    root_labels.add_argument("--max-nodes", type=int, default=256)
+    root_labels.add_argument("--time-budget-ms", type=int, default=1000)
+    root_labels.add_argument("--clean", action="store_true", help="Generate labels with the clean sequence evaluator feature set.")
+    root_labels.add_argument("--single-config", action="store_true", help="Ignore replay-submitted decks and use only --config.")
+    root_labels.add_argument("--workers", type=int, default=1, help="Generate labels across replay files with this many worker processes.")
+
     pretrain = sub.add_parser("pretrain", help="Supervised pretrain sequence weights from labels.")
     pretrain.add_argument("--labels", required=True)
     pretrain.add_argument("--out-dir", default="artifacts/checkpoints/replay_pretrain")
@@ -1994,7 +2101,7 @@ def main() -> None:
             num_hidden_samples=args.num_hidden_samples,
             multi_self_decks=not args.single_config,
         )
-    elif args.cmd in {"labels", "ranking-labels"}:
+    elif args.cmd in {"labels", "ranking-labels", "root-labels"}:
         build_label_dataset(
             args.inputs,
             output=args.output,
@@ -2010,6 +2117,7 @@ def main() -> None:
             clean_evaluator=args.clean,
             multi_self_decks=not args.single_config,
             workers=args.workers,
+            root_ranker_mode=args.cmd == "root-labels",
         )
     elif args.cmd == "pretrain":
         pretrain_sequence_scorer(

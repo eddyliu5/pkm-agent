@@ -92,6 +92,7 @@ def _candidate_record(candidate: Any) -> dict[str, Any]:
         "components": {
             "linear": _finite_float(getattr(components, "linear", 0.0)),
             "mlp": None if getattr(components, "mlp", None) is None else _finite_float(getattr(components, "mlp")),
+            "xgb": None if getattr(components, "xgb", None) is None else _finite_float(getattr(components, "xgb")),
             "value_proxy": _finite_float(getattr(components, "value_proxy", 0.0)),
             "risk": _finite_float(getattr(components, "risk", 0.0)),
             "plan_bonus": _finite_float(getattr(components, "plan_bonus", 0.0)),
@@ -182,6 +183,7 @@ def serialize_policy_decision(
         "hidden_samples_used": list(getattr(planning, "hidden_samples_used", ()) or ()),
         "trace": _trace_record(getattr(decision, "trace", None)),
         "calibration": _json_value(getattr(evaluated, "calibration", {}) or {}),
+        "evaluation_diagnostics": _json_value(getattr(evaluated, "diagnostics", {}) or {}),
         "candidates": [_candidate_record(candidate) for candidate in getattr(evaluated, "scored", ())],
     }
     return record

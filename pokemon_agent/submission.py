@@ -53,12 +53,15 @@ def build_raw_agent_submission(
 def build_submission(
     weights_path: str | None = None,
     mlp_model_path: str | None = None,
+    xgb_model_path: str | None = None,
     output: str = "artifacts/submission/submission.tar.gz",
     clean_evaluator: bool = False,
     deck_id: str | None = None,
     linear_score_weight: float | None = None,
     mlp_score_weight: float = 1.0,
 ) -> Path:
+    if mlp_model_path and xgb_model_path:
+        raise ValueError("MLP and XGB models cannot be packaged together")
     output_path = Path(output)
     if not output_path.is_absolute():
         output_path = PROJECT_ROOT / output_path
@@ -97,21 +100,31 @@ def build_submission(
         else:
             packaged_mlp_model = "mlp_model.json"
         shutil.copy2(source_mlp_model, build_dir / packaged_mlp_model)
+    packaged_xgb_model = None
+    if xgb_model_path:
+        source_xgb_model = Path(xgb_model_path)
+        if not source_xgb_model.is_file():
+            raise FileNotFoundError(f"XGB model does not exist: {source_xgb_model}")
+        packaged_xgb_model = "xgb_model.json"
+        shutil.copy2(source_xgb_model, build_dir / packaged_xgb_model)
     packaged_linear_score_weight = float(linear_score_weight) if linear_score_weight is not None else (0.0 if mlp_model_path else 1.0)
+    runtime_config = {
+        "clean_evaluator": bool(clean_evaluator),
+        "probability_features_enabled": True,
+        "mlp_enabled": bool(mlp_model_path),
+        "value_proxy_enabled": True,
+        "fallback_guardrail_enabled": True,
+        "engine_exception_fallback_enabled": False,
+        "num_hidden_samples": 1,
+        "linear_score_weight": packaged_linear_score_weight,
+        "mlp_score_weight": float(mlp_score_weight),
+        "mlp_model_file": packaged_mlp_model,
+    }
+    if packaged_xgb_model is not None:
+        runtime_config["xgb_model_file"] = packaged_xgb_model
     with (build_dir / "runtime_config.json").open("w", encoding="utf-8") as fh:
         json.dump(
-            {
-                "clean_evaluator": bool(clean_evaluator),
-                "probability_features_enabled": True,
-                "mlp_enabled": bool(mlp_model_path),
-                "value_proxy_enabled": True,
-                "fallback_guardrail_enabled": True,
-                "engine_exception_fallback_enabled": False,
-                "num_hidden_samples": 1,
-                "linear_score_weight": packaged_linear_score_weight,
-                "mlp_score_weight": float(mlp_score_weight),
-                "mlp_model_file": packaged_mlp_model,
-            },
+            runtime_config,
             fh,
             indent=2,
             sort_keys=True,
@@ -144,6 +157,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build Kaggle submission bundle.")
     parser.add_argument("--weights", default=None)
     parser.add_argument("--mlp-model", default=None)
+    parser.add_argument("--xgb-model", default=None, help="Package a compact JSON root ranker as xgb_model.json.")
     parser.add_argument("--output", default="artifacts/submission/submission.tar.gz")
     parser.add_argument("--clean", action="store_true", help="Package the clean sequence evaluator runtime.")
     parser.add_argument("--deck-id", default=None, help="Package this deck_db deck id instead of the default deck.")
@@ -151,6 +165,8 @@ def main() -> None:
     parser.add_argument("--linear-score-weight", type=float, default=None, help="Runtime linear evaluator weight. Defaults to 0 with MLP, 1 without MLP.")
     parser.add_argument("--mlp-score-weight", type=float, default=1.0, help="Runtime MLP score weight.")
     args = parser.parse_args()
+    if args.mlp_model and args.xgb_model:
+        parser.error("--mlp-model and --xgb-model are mutually exclusive")
     if args.raw_agent_dir:
         build_raw_agent_submission(
             agent_dir=args.raw_agent_dir,
@@ -160,6 +176,7 @@ def main() -> None:
     build_submission(
         weights_path=args.weights,
         mlp_model_path=args.mlp_model,
+        xgb_model_path=args.xgb_model,
         output=args.output,
         clean_evaluator=args.clean,
         deck_id=args.deck_id,

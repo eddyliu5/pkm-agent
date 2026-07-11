@@ -68,6 +68,7 @@ class PlanningResult:
 class ScoreBreakdown:
     linear: float = 0.0
     mlp: float | None = None
+    xgb: float | None = None
     value_proxy: float = 0.0
     risk: float = 0.0
     plan_bonus: float = 0.0
@@ -98,6 +99,10 @@ class ScoredCandidate:
         return self.components.mlp
 
     @property
+    def xgb_score(self) -> float | None:
+        return self.components.xgb
+
+    @property
     def value_score(self) -> float:
         return self.components.value_proxy
 
@@ -119,6 +124,7 @@ class EvaluationResult:
     score_breakdown: dict[int, ScoreBreakdown] = field(default_factory=dict)
     calibration: dict[str, float] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    guardrail_scored: tuple[ScoredCandidate, ...] = ()
 
     @property
     def evaluations(self) -> tuple[ScoredCandidate, ...]:

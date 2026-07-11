@@ -14,7 +14,7 @@ Module-level details live in each folder's `README.md`. This document is the pac
 
 ## Runtime Entrypoints
 
-`main.py` imports `pokemon_agent.runtime_agent.agent` for Kaggle submission. `runtime_agent.py` locates the bundle root, reads `deck.csv`, loads a deck config, optional `weights.json`, optional `mlp_model.pt`, and optional `runtime_config.json`, then creates one process-global `DecisionEngine`.
+`main.py` imports `pokemon_agent.runtime_agent.agent` for Kaggle submission. `runtime_agent.py` locates the bundle root, reads `deck.csv`, loads a deck config, optional `weights.json`, an optional MLP checkpoint or compact `xgb_model.json`, and optional `runtime_config.json`, then creates one process-global `DecisionEngine`. MLP and root-ranker models are mutually exclusive. Compact root inference is pure Python and does not import native XGBoost.
 
 At inference time:
 
@@ -36,7 +36,7 @@ The cross-stage data contracts are in `decision_types.py`.
 - `ObservedContext`: raw observation, legal `ActionView`s, parsed `AgentState`, persistent `OpponentMemory`, `BeliefState`, probability snapshot, game-plan context, resource snapshot, threat snapshot, and diagnostics.
 - `PlanningResult`: generated `CandidateSequence`s, optional `SearchTree`, coverage metrics, pruned-action diagnostics, hidden samples used, and planner diagnostics.
 - `ScoredCandidate`: immutable evaluation output for one candidate, including features, scalar score, component breakdown, rank, and warnings.
-- `EvaluationResult`: ranked scored candidates plus score calibration and diagnostics.
+- `EvaluationResult`: ranked selectable candidates, an optional auxiliary guardrail-only candidate set, score calibration, and diagnostics.
 - `AgentDecision`: final selected indices, chosen sequence view when applicable, scored candidate, and decision trace.
 
 The simulator accepts only the next legal selection, so even when planning explores a multi-step line, acting commits only `candidate.first_selection`.
@@ -84,12 +84,15 @@ Planning can also receive a validated warm-start continuation from the previous 
 
 - linear feature score through `SequenceScorer`
 - optional MLP ranker score from `MLPSequenceRanker`
+- optional immediate-root score loaded through `load_root_ranker`
 - optional heuristic state-delta value proxy
 - risk-model score
 - opponent-counterplay score, based on the increase in immediate response risk created by the candidate sequence
 - plan-priority bonus
 
 When an MLP ranker is loaded, the intended architecture is linear-for-search and MLP-for-ranking: linear weights still feed planner expansion, pruning, fallback, and diagnostics, while final candidate score defaults to `mlp_score` only (`linear_score_weight=0.0`, `mlp_score_weight=1.0`). Guardrails remain enabled after ranking to reject invalid or obviously unsafe final selections.
+
+When a root ranker is loaded, evaluation first chooses one deterministic representative per canonical `first_selection`. The first 24 base-ordered roots remain the only selectable candidates and are reranked by the learned model. Every deduplicated root is also scored into `EvaluationResult.guardrail_scored`, allowing an outside-cap linear fallback to remain visible to `FallbackGuardrail` without expanding the action selector's candidate set. Root ranking requires one hidden sample and cannot be combined with MLP ranking.
 
 The result is a ranked tuple of `ScoredCandidate` records. Evaluation does not mutate `CandidateSequence`.
 
@@ -111,13 +114,16 @@ The agent reasons primarily over integer card IDs.
 
 Card IDs come from `deck.csv`, `configs/*.json`, simulator observations, and `data/deck_db/decks.json`. `card_db.py` and `knowledge.py` attach metadata, strategic roles, card embeddings, evolution flags, attack data, energy classification, and prize values. Config card groups drive game-plan features, action labels, probability summaries, and deck-specific heuristic behavior.
 
-Trainable or learned components are intentionally replaceable, but only the MLP ranker is the current improvement target:
+Trainable or learned components are intentionally replaceable:
 
 - PyTorch MLP sequence rankers in `mlp_model.pt`
+- immediate-root rankers trained with native XGBoost and shipped as compact `xgb_model.json`
 - explicit sequence feature schemas in `SequenceFeaturizer` and `CleanSequenceFeaturizer`
 - replay and MLP training utilities in `replay_pipeline.py`
 
 The MLP ranker is a two-hidden-layer model trained with PyTorch by default and loaded from `.pt` checkpoints. Training excludes scorer-produced `linear_score`/`mlp_score` diagnostics from its input vocabulary, uses full-schema features by default, builds replay labels from each player's submitted deck when available, and selects best checkpoints from a deterministic replay-source validation split.
+
+The root-ranker pipeline creates deterministic replay splits, builds expert labels over canonical immediate roots, trains a fixed native XGBoost ranker offline, and exports a compact JSON tree ensemble for runtime. The validated 30-deck full matrix produced a 61.07% pooled win rate versus 50.29% for `sequence` over 4,500 games per policy, with zero invalid actions and a +10.78 percentage-point paired delta.
 
 Unnecessary for the current workflow:
 
@@ -126,4 +132,4 @@ Unnecessary for the current workflow:
 - training linear weights as the main improvement path rather than search support
 - carrying backward-compatibility behavior for old checkpoints
 
-Runtime options in `runtime_config.json` can enable or disable clean evaluation, probability features, MLP scoring, value proxy scoring, fallback guardrails, score weights, and hidden sample count.
+Runtime options in `runtime_config.json` can enable or disable clean evaluation, probability features, MLP scoring, value proxy scoring, fallback guardrails, score weights, and hidden sample count. `xgb_model_file` optionally names a packaged compact root model; submission packaging writes it as `xgb_model.json`.

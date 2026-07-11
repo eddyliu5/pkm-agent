@@ -8,6 +8,7 @@ class FallbackGuardrail:
 
     LINEAR_MARGIN = 250.0
     MLP_DISAGREEMENT_TOLERANCE = 2.0
+    XGB_DISAGREEMENT_TOLERANCE = 0.0
 
     def should_use_fallback(
         self,
@@ -15,7 +16,7 @@ class FallbackGuardrail:
         candidates: list[ScoredCandidate] | tuple[ScoredCandidate, ...],
         fallback_selected: list[int],
     ) -> tuple[bool, str | None]:
-        if not fallback_selected or chosen.candidate.first_selection == fallback_selected:
+        if not fallback_selected or self._selection_key(chosen.candidate.first_selection) == self._selection_key(fallback_selected):
             return False, None
         features = chosen.features
         tactical_payoff = (
@@ -27,15 +28,25 @@ class FallbackGuardrail:
         )
         if tactical_payoff:
             return False, None
-        fallback_key = tuple(fallback_selected)
-        fallback_candidate = next((item for item in candidates if tuple(item.candidate.first_selection) == fallback_key), None)
+        fallback_key = self._selection_key(fallback_selected)
+        fallback_candidate = next(
+            (item for item in candidates if self._selection_key(item.candidate.first_selection) == fallback_key),
+            None,
+        )
         if fallback_candidate is None:
-            if self._uses_mlp_score(chosen):
+            if self._uses_learned_score(chosen):
                 if chosen.components.linear < self.LINEAR_MARGIN:
                     return True, "fallback_not_represented_low_linear_confidence"
                 return False, None
             if chosen.score < self.LINEAR_MARGIN:
                 return True, "fallback_not_represented_low_confidence"
+            return False, None
+
+        if self._uses_xgb_score(chosen) or self._uses_xgb_score(fallback_candidate):
+            fallback_linear_edge = fallback_candidate.components.linear - chosen.components.linear
+            xgb_disagreement = self._xgb_edge(chosen, fallback_candidate)
+            if fallback_linear_edge >= self.LINEAR_MARGIN and xgb_disagreement <= self.XGB_DISAGREEMENT_TOLERANCE:
+                return True, "fallback_linear_margin_xgb_guardrail"
             return False, None
 
         if self._uses_mlp_score(chosen) or self._uses_mlp_score(fallback_candidate):
@@ -54,7 +65,25 @@ class FallbackGuardrail:
         return candidate.components.mlp is not None
 
     @staticmethod
+    def _uses_xgb_score(candidate: ScoredCandidate) -> bool:
+        return candidate.components.xgb is not None
+
+    @classmethod
+    def _uses_learned_score(cls, candidate: ScoredCandidate) -> bool:
+        return cls._uses_mlp_score(candidate) or cls._uses_xgb_score(candidate)
+
+    @staticmethod
     def _mlp_edge(chosen: ScoredCandidate, fallback_candidate: ScoredCandidate) -> float:
         if chosen.components.mlp is not None and fallback_candidate.components.mlp is not None:
             return chosen.components.mlp - fallback_candidate.components.mlp
         return chosen.score - fallback_candidate.score
+
+    @staticmethod
+    def _xgb_edge(chosen: ScoredCandidate, fallback_candidate: ScoredCandidate) -> float:
+        if chosen.components.xgb is not None and fallback_candidate.components.xgb is not None:
+            return chosen.components.xgb - fallback_candidate.components.xgb
+        return chosen.score - fallback_candidate.score
+
+    @staticmethod
+    def _selection_key(selected: list[int] | tuple[int, ...]) -> tuple[int, ...]:
+        return tuple(sorted(int(index) for index in selected))

@@ -64,6 +64,7 @@ class DecisionEngine:
         config: dict[str, Any],
         weights: dict[str, float] | None = None,
         mlp_ranker: MLPSequenceRanker | None = None,
+        xgb_ranker: Any | None = None,
         linear_score_weight: float = 1.0,
         mlp_score_weight: float = 5.0,
         search_config: SequenceSearchConfig | None = None,
@@ -78,6 +79,10 @@ class DecisionEngine:
         self.deck = [int(card_id) for card_id in deck]
         self.config = config
         self.search_config = search_config or SequenceSearchConfig()
+        if xgb_ranker is not None and mlp_ranker is not None:
+            raise ValueError("MLP and XGB rankers cannot be enabled together")
+        if xgb_ranker is not None and self.search_config.num_hidden_samples != 1:
+            raise ValueError("XGB root ranking requires num_hidden_samples=1")
         self.fallback = LinearQPolicy(weights=weights, config=config)
         self.opponent_memory = OpponentMemory()
         self.observation_builder = ObservationBuilder(
@@ -98,6 +103,10 @@ class DecisionEngine:
             mlp_ranker = None
         if mlp_ranker is not None:
             mlp_ranker.validate_feature_schema(self.feature_schema_version)
+        if xgb_ranker is not None:
+            validate_schema = getattr(xgb_ranker, "validate_feature_schema", None)
+            if callable(validate_schema):
+                validate_schema(self.feature_schema_version)
         self.featurizer = (
             CleanSequenceFeaturizer(config=config)
             if self.clean_evaluator
@@ -117,6 +126,7 @@ class DecisionEngine:
             value_proxy=self.value_model,
             clean=self.clean_evaluator,
             value_proxy_enabled=self.value_proxy_enabled,
+            xgb_ranker=xgb_ranker,
         )
         self.selector = ActionSelector(seed=seed)
         self.guardrail = FallbackGuardrail()
@@ -228,7 +238,12 @@ class DecisionEngine:
         if chosen is None:
             return self._fallback_decision(obs)
         fallback_selected, _ = sanitize_selection(obs, self.fallback.choose(obs))
-        use_fallback, fallback_reason = self.guardrail.should_use_fallback(chosen, scored, fallback_selected)
+        guardrail_scored = evaluated.guardrail_scored or scored
+        use_fallback, fallback_reason = self.guardrail.should_use_fallback(
+            chosen,
+            guardrail_scored,
+            fallback_selected,
+        )
         if mode == "eval" and self.fallback_guardrail_enabled and use_fallback:
             self._clear_warm_start(fallback_reason or "fallback_guardrail")
             return AgentDecision(
