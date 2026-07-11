@@ -10,14 +10,27 @@ Promoted as an opt-in policy after a frozen 30-deck, five-rotation evaluation. T
 
 The retained design ranks canonical immediate action roots rather than full sequence variants. Native XGBoost is used only for offline training; production inference uses the checked-in compact JSON model and a dependency-free loader. Linear guardrails can still select a safety fallback outside the model's 24-root selectable cap.
 
+### Rejected: Hidden-State Root Aggregation
+
+A belief-root determinization experiment aggregated candidate values across sampled hidden states. In the frozen 4,500-game-per-arm matrix it reached 49.58% versus 48.73% for its baseline, a +0.84 percentage-point result whose confidence interval crossed zero. Prize performance worsened and the apparent gain was concentrated by seat, so the implementation was reverted.
+
+### Rejected: Structured Critique Penalties
+
+Relational critique rules were evaluated on 5,917 untouched validation groups using the committed root ranker. Rules covered missed forced wins, missed KO lines, ignored must-answer targets, premature endings, counter-KO exposure, low-value energy attachments, and setup overcommitment. No rule met the predeclared support and +0.25 percentage-point top-1 gate. The best supported rule improved expert-root top-1 by only 0.034 points; several intuitive rules reduced accuracy. No action-changing critique code was retained.
+
+### Rejected: Analytic Opponent-Response Tail Reranking
+
+Expected-risk and upper-tail aggregations over the existing active, gust, switch, energy, tool, and evolution response components were tested on the same validation split. Max-risk and tail-risk penalties reduced top-1 accuracy by roughly 0.12 to 0.15 percentage points; the best fragility variant changed two groups and gained one correct prediction (+0.017 points), below the promotion gate.
+
+True legal opponent-response search remains a larger architectural option rather than a ready evaluator feature. Simulator branch handles are valid only during sequence generation and are closed before XGBoost identifies the top roots. Implementing honest top-root reply search therefore requires a live-search callback or deterministic replay/re-root layer plus an opponent policy, rather than resuming stored candidate IDs.
+
 ## Priority Order
 
-1. Add structured critique reason codes.
-2. Expand decision logging around ranker/guardrail disagreements.
+1. Expand decision logging around ranker/guardrail disagreements.
+2. Replace the heuristic value proxy with a calibrated value model.
 3. Add local replay retrieval features.
-4. Replace the heuristic value proxy with a calibrated value model.
-5. Add opponent-belief confidence and a robust/exploit gate.
-6. Try root-level opponent response search.
+4. Add opponent-belief confidence and a robust/exploit gate.
+5. Revisit legal opponent-response search only after adding resumable search sessions and an opponent policy.
 
 ## Ideas To Try
 
@@ -36,22 +49,6 @@ Add a stable JSONL schema for every decision:
 - terminal outcome or later reward
 
 This should come first because it feeds retrieval, ranking, value training, and critique labels.
-
-### Structured Critique
-
-Add deterministic reason codes after evaluation and before action selection. Start with bounded penalties, not hard rewrites.
-
-Candidate reason codes:
-
-- `missed_ko_line`
-- `exposed_active_to_ko`
-- `ended_with_useful_action_available`
-- `wasted_energy_attachment`
-- `overcommitted_setup`
-- `ignored_must_answer_target`
-- `low_confidence_retrieval`
-
-Log every critique so it can later become training data.
 
 ### Local Replay Retrieval
 
