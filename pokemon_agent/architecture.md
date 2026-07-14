@@ -12,6 +12,8 @@ When the selected candidate has additional planned steps, `DecisionEngine` cache
 
 Module-level details live in each folder's `README.md`. This document is the package-level map and should be updated whenever a feature changes the runtime architecture.
 
+The optional competition-only deterministic RL engine is training infrastructure, not part of this runtime package. Its location, license boundary, build steps, and appropriate use are documented in [`../rl_engine.md`](../rl_engine.md). Production inference and honest evaluation continue to use the ordinary public-observation simulator interface.
+
 ## Runtime Entrypoints
 
 `main.py` imports `pokemon_agent.runtime_agent.agent` for Kaggle submission. `runtime_agent.py` locates the bundle root, reads `deck.csv`, loads a deck config, optional `weights.json`, an optional MLP checkpoint or compact `xgb_model.json`, and optional `runtime_config.json`, then creates one process-global `DecisionEngine`. MLP and root-ranker models are mutually exclusive. Compact root inference is pure Python and does not import native XGBoost.

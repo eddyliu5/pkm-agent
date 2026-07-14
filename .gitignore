@@ -41,3 +41,6 @@ baseline/compare/
 data/pokemon-tcg-ai-battle/
 data/kaggle_replays/
 pkm-agent_replays/
+
+# Local development notes
+next_steps.md
