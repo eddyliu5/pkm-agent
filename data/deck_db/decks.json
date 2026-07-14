@@ -38,6 +38,15 @@
         "wall"
       ]
     },
+    "crustle_control": {
+      "family": "grass_darkness",
+      "name": "Crustle Control",
+      "tags": [
+        "control",
+        "wall",
+        "multi_energy"
+      ]
+    },
     "cynthia_garchomp": {
       "family": "fighting_grass",
       "name": "Cynthia's Garchomp ex",
@@ -239,6 +248,16 @@
         "basic_ex",
         "multi_energy",
         "tera"
+      ]
+    },
+    "mega_kangaskhan_crustle": {
+      "family": "grass",
+      "name": "Mega Kangaskhan ex / Crustle",
+      "tags": [
+        "mega_ex",
+        "stage1",
+        "wall",
+        "control"
       ]
     },
     "team_rocket_spidops": {
@@ -16650,9 +16669,2696 @@
         "unique_card_ids": 19,
         "valid": true
       }
+    },
+    {
+      "archetype": "alakazam_dudunsparce",
+      "archetype_name": "Alakazam / Dudunsparce",
+      "composition": {
+        "pokemon": 18,
+        "energy": 7,
+        "trainer": 35
+      },
+      "counts": [
+        {
+          "id": 5,
+          "count": 2
+        },
+        {
+          "id": 13,
+          "count": 1
+        },
+        {
+          "id": 19,
+          "count": 4
+        },
+        {
+          "id": 66,
+          "count": 2
+        },
+        {
+          "id": 245,
+          "count": 1
+        },
+        {
+          "id": 305,
+          "count": 3
+        },
+        {
+          "id": 343,
+          "count": 1
+        },
+        {
+          "id": 741,
+          "count": 4
+        },
+        {
+          "id": 742,
+          "count": 4
+        },
+        {
+          "id": 743,
+          "count": 3
+        },
+        {
+          "id": 1079,
+          "count": 4
+        },
+        {
+          "id": 1081,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 2
+        },
+        {
+          "id": 1129,
+          "count": 1
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1184,
+          "count": 2
+        },
+        {
+          "id": 1197,
+          "count": 2
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1231,
+          "count": 4
+        },
+        {
+          "id": 1264,
+          "count": 1
+        }
+      ],
+      "id": "kaggle_top15_20260711_alakazam_dudunsparce_24cc2a555965",
+      "name": "Kaggle July 11 Top-15 Alakazam / Dudunsparce 24cc2a555965",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "24cc2a555965",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85311211,
+          "max": 85355238
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 01:19:13.865000",
+          "end": "2026-07-11 07:01:42.397000"
+        },
+        "observed_player_decks": 12,
+        "observed_wins": 5,
+        "observed_win_rate": 0.4167,
+        "elite_both_top15_player_decks": 5,
+        "elite_both_top15_wins": 1,
+        "elite_both_top15_win_rate": 0.2,
+        "representative_team": "capbloo",
+        "team_counts": [
+          {
+            "team_name": "capbloo",
+            "count": 12
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85311211",
+            "player_index": 1,
+            "team_name": "capbloo",
+            "won": true,
+            "create_time": "2026-07-11 01:19:13.865000",
+            "end_time": "2026-07-11 01:21:54.594000"
+          },
+          {
+            "episode_id": "85311976",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": false,
+            "create_time": "2026-07-11 01:23:14.284000",
+            "end_time": "2026-07-11 01:25:40.857000"
+          },
+          {
+            "episode_id": "85313861",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": false,
+            "create_time": "2026-07-11 01:39:01.309000",
+            "end_time": "2026-07-11 01:42:08.394000"
+          },
+          {
+            "episode_id": "85324025",
+            "player_index": 1,
+            "team_name": "capbloo",
+            "won": false,
+            "create_time": "2026-07-11 02:55:05.669000",
+            "end_time": "2026-07-11 02:57:59.076000"
+          },
+          {
+            "episode_id": "85331918",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": true,
+            "create_time": "2026-07-11 03:55:07.672000",
+            "end_time": "2026-07-11 04:02:50.799000"
+          },
+          {
+            "episode_id": "85332457",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": true,
+            "create_time": "2026-07-11 03:59:03.097000",
+            "end_time": "2026-07-11 04:01:54.838000"
+          },
+          {
+            "episode_id": "85335694",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": false,
+            "create_time": "2026-07-11 04:23:06.988000",
+            "end_time": "2026-07-11 04:26:00.891000"
+          },
+          {
+            "episode_id": "85339714",
+            "player_index": 0,
+            "team_name": "capbloo",
+            "won": true,
+            "create_time": "2026-07-11 04:55:04.999000",
+            "end_time": "2026-07-11 04:57:57.454000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 8,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "alakazam_dudunsparce",
+      "archetype_name": "Alakazam / Dudunsparce",
+      "composition": {
+        "pokemon": 20,
+        "energy": 7,
+        "trainer": 33
+      },
+      "counts": [
+        {
+          "id": 5,
+          "count": 3
+        },
+        {
+          "id": 19,
+          "count": 4
+        },
+        {
+          "id": 66,
+          "count": 3
+        },
+        {
+          "id": 140,
+          "count": 1
+        },
+        {
+          "id": 305,
+          "count": 4
+        },
+        {
+          "id": 741,
+          "count": 4
+        },
+        {
+          "id": 742,
+          "count": 4
+        },
+        {
+          "id": 743,
+          "count": 4
+        },
+        {
+          "id": 1079,
+          "count": 4
+        },
+        {
+          "id": 1081,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 1
+        },
+        {
+          "id": 1129,
+          "count": 1
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1184,
+          "count": 1
+        },
+        {
+          "id": 1197,
+          "count": 3
+        },
+        {
+          "id": 1225,
+          "count": 3
+        },
+        {
+          "id": 1231,
+          "count": 4
+        },
+        {
+          "id": 1247,
+          "count": 1
+        }
+      ],
+      "id": "kaggle_top15_20260711_alakazam_dudunsparce_6934a9f41ec4",
+      "name": "Kaggle July 11 Top-15 Alakazam / Dudunsparce 6934a9f41ec4",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "6934a9f41ec4",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85343867,
+          "max": 85356299
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 05:27:08.869000",
+          "end": "2026-07-11 07:09:03.880000"
+        },
+        "observed_player_decks": 14,
+        "observed_wins": 9,
+        "observed_win_rate": 0.6429,
+        "elite_both_top15_player_decks": 7,
+        "elite_both_top15_wins": 3,
+        "elite_both_top15_win_rate": 0.4286,
+        "representative_team": "LiamK",
+        "team_counts": [
+          {
+            "team_name": "LiamK",
+            "count": 14
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85343867",
+            "player_index": 1,
+            "team_name": "LiamK",
+            "won": true,
+            "create_time": "2026-07-11 05:27:08.869000",
+            "end_time": "2026-07-11 05:29:32.191000"
+          },
+          {
+            "episode_id": "85344346",
+            "player_index": 0,
+            "team_name": "LiamK",
+            "won": true,
+            "create_time": "2026-07-11 05:30:58.765000",
+            "end_time": "2026-07-11 05:33:09.438000"
+          },
+          {
+            "episode_id": "85345832",
+            "player_index": 1,
+            "team_name": "LiamK",
+            "won": false,
+            "create_time": "2026-07-11 05:42:59.904000",
+            "end_time": "2026-07-11 05:45:40.110000"
+          },
+          {
+            "episode_id": "85346343",
+            "player_index": 0,
+            "team_name": "LiamK",
+            "won": false,
+            "create_time": "2026-07-11 05:47:09.416000",
+            "end_time": "2026-07-11 05:49:53.257000"
+          },
+          {
+            "episode_id": "85346865",
+            "player_index": 0,
+            "team_name": "LiamK",
+            "won": true,
+            "create_time": "2026-07-11 05:50:57.908000",
+            "end_time": "2026-07-11 05:53:43.182000"
+          },
+          {
+            "episode_id": "85347353",
+            "player_index": 1,
+            "team_name": "LiamK",
+            "won": true,
+            "create_time": "2026-07-11 05:55:05.477000",
+            "end_time": "2026-07-11 05:57:34.768000"
+          },
+          {
+            "episode_id": "85347867",
+            "player_index": 0,
+            "team_name": "LiamK",
+            "won": false,
+            "create_time": "2026-07-11 05:58:59.638000",
+            "end_time": "2026-07-11 06:01:28.122000"
+          },
+          {
+            "episode_id": "85348380",
+            "player_index": 1,
+            "team_name": "LiamK",
+            "won": true,
+            "create_time": "2026-07-11 06:03:00.100000",
+            "end_time": "2026-07-11 06:05:42.957000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 20,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "alakazam_dudunsparce",
+      "archetype_name": "Alakazam / Dudunsparce",
+      "composition": {
+        "pokemon": 19,
+        "energy": 7,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "id": 5,
+          "count": 2
+        },
+        {
+          "id": 13,
+          "count": 1
+        },
+        {
+          "id": 19,
+          "count": 4
+        },
+        {
+          "id": 66,
+          "count": 2
+        },
+        {
+          "id": 140,
+          "count": 1
+        },
+        {
+          "id": 305,
+          "count": 3
+        },
+        {
+          "id": 343,
+          "count": 1
+        },
+        {
+          "id": 741,
+          "count": 4
+        },
+        {
+          "id": 742,
+          "count": 4
+        },
+        {
+          "id": 743,
+          "count": 4
+        },
+        {
+          "id": 1079,
+          "count": 3
+        },
+        {
+          "id": 1081,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 1
+        },
+        {
+          "id": 1129,
+          "count": 1
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1184,
+          "count": 1
+        },
+        {
+          "id": 1197,
+          "count": 3
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1231,
+          "count": 4
+        },
+        {
+          "id": 1266,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_alakazam_dudunsparce_9294d9d8360a",
+      "name": "Kaggle July 11 Top-15 Alakazam / Dudunsparce 9294d9d8360a",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "9294d9d8360a",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85338657,
+          "max": 85359224
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 04:47:00.913000",
+          "end": "2026-07-11 07:36:34.756000"
+        },
+        "observed_player_decks": 20,
+        "observed_wins": 11,
+        "observed_win_rate": 0.55,
+        "elite_both_top15_player_decks": 19,
+        "elite_both_top15_wins": 10,
+        "elite_both_top15_win_rate": 0.5263,
+        "representative_team": "Majkel1337",
+        "team_counts": [
+          {
+            "team_name": "Majkel1337",
+            "count": 20
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85338657",
+            "player_index": 1,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 04:47:00.913000",
+            "end_time": "2026-07-11 04:49:45.306000"
+          },
+          {
+            "episode_id": "85344301",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 05:30:58.699000",
+            "end_time": "2026-07-11 05:33:25.383000"
+          },
+          {
+            "episode_id": "85345807",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": false,
+            "create_time": "2026-07-11 05:42:59.859000",
+            "end_time": "2026-07-11 05:46:04.216000"
+          },
+          {
+            "episode_id": "85348847",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 06:06:59.872000",
+            "end_time": "2026-07-11 06:09:22.415000"
+          },
+          {
+            "episode_id": "85349850",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 06:14:59.612000",
+            "end_time": "2026-07-11 06:18:02.106000"
+          },
+          {
+            "episode_id": "85351306",
+            "player_index": 1,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 06:26:58.519000",
+            "end_time": "2026-07-11 06:31:17.883000"
+          },
+          {
+            "episode_id": "85353345",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 06:43:08.798000",
+            "end_time": "2026-07-11 06:47:13.317000"
+          },
+          {
+            "episode_id": "85354806",
+            "player_index": 1,
+            "team_name": "Majkel1337",
+            "won": false,
+            "create_time": "2026-07-11 06:54:57.164000",
+            "end_time": "2026-07-11 06:59:42.778000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "alakazam_dudunsparce",
+      "archetype_name": "Alakazam / Dudunsparce",
+      "composition": {
+        "pokemon": 19,
+        "energy": 7,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "id": 5,
+          "count": 2
+        },
+        {
+          "id": 13,
+          "count": 1
+        },
+        {
+          "id": 19,
+          "count": 4
+        },
+        {
+          "id": 66,
+          "count": 2
+        },
+        {
+          "id": 140,
+          "count": 1
+        },
+        {
+          "id": 305,
+          "count": 3
+        },
+        {
+          "id": 343,
+          "count": 1
+        },
+        {
+          "id": 741,
+          "count": 4
+        },
+        {
+          "id": 742,
+          "count": 4
+        },
+        {
+          "id": 743,
+          "count": 4
+        },
+        {
+          "id": 1079,
+          "count": 3
+        },
+        {
+          "id": 1081,
+          "count": 3
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 1
+        },
+        {
+          "id": 1129,
+          "count": 1
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1184,
+          "count": 1
+        },
+        {
+          "id": 1197,
+          "count": 3
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1231,
+          "count": 4
+        },
+        {
+          "id": 1266,
+          "count": 3
+        }
+      ],
+      "id": "kaggle_top15_20260711_alakazam_dudunsparce_a4f0650bcc01",
+      "name": "Kaggle July 11 Top-15 Alakazam / Dudunsparce a4f0650bcc01",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "a4f0650bcc01",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85331866,
+          "max": 85359224
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 03:55:07.588000",
+          "end": "2026-07-11 07:36:34.756000"
+        },
+        "observed_player_decks": 37,
+        "observed_wins": 25,
+        "observed_win_rate": 0.6757,
+        "elite_both_top15_player_decks": 31,
+        "elite_both_top15_wins": 19,
+        "elite_both_top15_win_rate": 0.6129,
+        "representative_team": "bono",
+        "team_counts": [
+          {
+            "team_name": "bono",
+            "count": 16
+          },
+          {
+            "team_name": "Yushin Ito",
+            "count": 13
+          },
+          {
+            "team_name": "Majkel1337",
+            "count": 8
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85331866",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 03:55:07.588000",
+            "end_time": "2026-07-11 03:58:23.697000"
+          },
+          {
+            "episode_id": "85336220",
+            "player_index": 0,
+            "team_name": "bono",
+            "won": true,
+            "create_time": "2026-07-11 04:27:17.170000",
+            "end_time": "2026-07-11 04:29:23.162000"
+          },
+          {
+            "episode_id": "85336749",
+            "player_index": 0,
+            "team_name": "bono",
+            "won": false,
+            "create_time": "2026-07-11 04:31:11.593000",
+            "end_time": "2026-07-11 04:36:01.229000"
+          },
+          {
+            "episode_id": "85339262",
+            "player_index": 0,
+            "team_name": "Majkel1337",
+            "won": true,
+            "create_time": "2026-07-11 04:51:08.883000",
+            "end_time": "2026-07-11 04:53:41.729000"
+          },
+          {
+            "episode_id": "85341053",
+            "player_index": 1,
+            "team_name": "bono",
+            "won": true,
+            "create_time": "2026-07-11 05:07:07.125000",
+            "end_time": "2026-07-11 05:09:18.892000"
+          },
+          {
+            "episode_id": "85342272",
+            "player_index": 1,
+            "team_name": "bono",
+            "won": true,
+            "create_time": "2026-07-11 05:15:11.620000",
+            "end_time": "2026-07-11 05:17:37.434000"
+          },
+          {
+            "episode_id": "85343272",
+            "player_index": 0,
+            "team_name": "bono",
+            "won": true,
+            "create_time": "2026-07-11 05:23:05.381000",
+            "end_time": "2026-07-11 05:25:29.415000"
+          },
+          {
+            "episode_id": "85343530",
+            "player_index": 0,
+            "team_name": "bono",
+            "won": true,
+            "create_time": "2026-07-11 05:27:08.377000",
+            "end_time": "2026-07-11 05:29:37.924000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 22,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "crustle_control",
+      "archetype_name": "Crustle Control",
+      "composition": {
+        "pokemon": 16,
+        "energy": 14,
+        "trainer": 30
+      },
+      "counts": [
+        {
+          "id": 1,
+          "count": 3
+        },
+        {
+          "id": 3,
+          "count": 1
+        },
+        {
+          "id": 6,
+          "count": 1
+        },
+        {
+          "id": 7,
+          "count": 3
+        },
+        {
+          "id": 16,
+          "count": 4
+        },
+        {
+          "id": 18,
+          "count": 2
+        },
+        {
+          "id": 112,
+          "count": 4
+        },
+        {
+          "id": 117,
+          "count": 2
+        },
+        {
+          "id": 344,
+          "count": 4
+        },
+        {
+          "id": 345,
+          "count": 4
+        },
+        {
+          "id": 414,
+          "count": 2
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1120,
+          "count": 1
+        },
+        {
+          "id": 1147,
+          "count": 4
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1159,
+          "count": 1
+        },
+        {
+          "id": 1198,
+          "count": 4
+        },
+        {
+          "id": 1210,
+          "count": 4
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1236,
+          "count": 4
+        }
+      ],
+      "id": "kaggle_top15_20260711_crustle_control_fbd9b0cbfe77",
+      "name": "Kaggle July 11 Top-15 Crustle Control fbd9b0cbfe77",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "fbd9b0cbfe77",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85331866,
+          "max": 85355314
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 03:55:07.588000",
+          "end": "2026-07-11 07:03:41.213000"
+        },
+        "observed_player_decks": 12,
+        "observed_wins": 6,
+        "observed_win_rate": 0.5,
+        "elite_both_top15_player_decks": 5,
+        "elite_both_top15_wins": 2,
+        "elite_both_top15_win_rate": 0.4,
+        "representative_team": "THIRD PTCG Club",
+        "team_counts": [
+          {
+            "team_name": "THIRD PTCG Club",
+            "count": 12
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85331866",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": false,
+            "create_time": "2026-07-11 03:55:07.588000",
+            "end_time": "2026-07-11 03:58:23.697000"
+          },
+          {
+            "episode_id": "85333446",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": true,
+            "create_time": "2026-07-11 04:07:06.107000",
+            "end_time": "2026-07-11 04:10:09.986000"
+          },
+          {
+            "episode_id": "85336156",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": true,
+            "create_time": "2026-07-11 04:27:17.085000",
+            "end_time": "2026-07-11 04:29:33.624000"
+          },
+          {
+            "episode_id": "85339258",
+            "player_index": 0,
+            "team_name": "THIRD PTCG Club",
+            "won": false,
+            "create_time": "2026-07-11 04:51:08.876000",
+            "end_time": "2026-07-11 04:54:30.435000"
+          },
+          {
+            "episode_id": "85339704",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": true,
+            "create_time": "2026-07-11 04:55:04.986000",
+            "end_time": "2026-07-11 04:57:58.836000"
+          },
+          {
+            "episode_id": "85341287",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": true,
+            "create_time": "2026-07-11 05:07:07.493000",
+            "end_time": "2026-07-11 05:09:51.198000"
+          },
+          {
+            "episode_id": "85344895",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": false,
+            "create_time": "2026-07-11 05:35:04.968000",
+            "end_time": "2026-07-11 05:37:44.320000"
+          },
+          {
+            "episode_id": "85350413",
+            "player_index": 1,
+            "team_name": "THIRD PTCG Club",
+            "won": true,
+            "create_time": "2026-07-11 06:19:01.063000",
+            "end_time": "2026-07-11 06:21:47.179000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 12,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 20,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "cynthia_garchomp",
+      "archetype_name": "Cynthia's Garchomp ex",
+      "composition": {
+        "pokemon": 20,
+        "energy": 9,
+        "trainer": 31
+      },
+      "counts": [
+        {
+          "id": 6,
+          "count": 5
+        },
+        {
+          "id": 20,
+          "count": 4
+        },
+        {
+          "id": 341,
+          "count": 4
+        },
+        {
+          "id": 342,
+          "count": 3
+        },
+        {
+          "id": 379,
+          "count": 4
+        },
+        {
+          "id": 380,
+          "count": 4
+        },
+        {
+          "id": 381,
+          "count": 3
+        },
+        {
+          "id": 387,
+          "count": 2
+        },
+        {
+          "id": 1080,
+          "count": 1
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 2
+        },
+        {
+          "id": 1142,
+          "count": 4
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1173,
+          "count": 3
+        },
+        {
+          "id": 1182,
+          "count": 2
+        },
+        {
+          "id": 1197,
+          "count": 1
+        },
+        {
+          "id": 1203,
+          "count": 1
+        },
+        {
+          "id": 1225,
+          "count": 3
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1261,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_cynthia_garchomp_c7b3253feaa4",
+      "name": "Kaggle July 11 Top-15 Cynthia's Garchomp ex c7b3253feaa4",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "c7b3253feaa4",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85341774,
+          "max": 85355314
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 05:10:58.432000",
+          "end": "2026-07-11 07:03:41.213000"
+        },
+        "observed_player_decks": 29,
+        "observed_wins": 16,
+        "observed_win_rate": 0.5517,
+        "elite_both_top15_player_decks": 21,
+        "elite_both_top15_wins": 8,
+        "elite_both_top15_win_rate": 0.381,
+        "representative_team": "junlee789 - 이준",
+        "team_counts": [
+          {
+            "team_name": "junlee789 - 이준",
+            "count": 16
+          },
+          {
+            "team_name": "nasuo445",
+            "count": 13
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85341774",
+            "player_index": 0,
+            "team_name": "nasuo445",
+            "won": true,
+            "create_time": "2026-07-11 05:10:58.432000",
+            "end_time": "2026-07-11 05:14:55.874000"
+          },
+          {
+            "episode_id": "85341815",
+            "player_index": 0,
+            "team_name": "nasuo445",
+            "won": true,
+            "create_time": "2026-07-11 05:10:58.500000",
+            "end_time": "2026-07-11 05:13:24.888000"
+          },
+          {
+            "episode_id": "85341823",
+            "player_index": 0,
+            "team_name": "nasuo445",
+            "won": true,
+            "create_time": "2026-07-11 05:10:58.509000",
+            "end_time": "2026-07-11 05:13:56.810000"
+          },
+          {
+            "episode_id": "85342272",
+            "player_index": 0,
+            "team_name": "nasuo445",
+            "won": false,
+            "create_time": "2026-07-11 05:15:11.620000",
+            "end_time": "2026-07-11 05:17:37.434000"
+          },
+          {
+            "episode_id": "85342786",
+            "player_index": 1,
+            "team_name": "nasuo445",
+            "won": true,
+            "create_time": "2026-07-11 05:18:57.976000",
+            "end_time": "2026-07-11 05:21:38.455000"
+          },
+          {
+            "episode_id": "85343324",
+            "player_index": 1,
+            "team_name": "nasuo445",
+            "won": false,
+            "create_time": "2026-07-11 05:23:05.419000",
+            "end_time": "2026-07-11 05:25:47.431000"
+          },
+          {
+            "episode_id": "85343782",
+            "player_index": 1,
+            "team_name": "nasuo445",
+            "won": false,
+            "create_time": "2026-07-11 05:27:08.713000",
+            "end_time": "2026-07-11 05:29:52.958000"
+          },
+          {
+            "episode_id": "85343867",
+            "player_index": 0,
+            "team_name": "nasuo445",
+            "won": false,
+            "create_time": "2026-07-11 05:27:08.869000",
+            "end_time": "2026-07-11 05:29:32.191000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 20,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult",
+      "archetype_name": "Dragapult ex",
+      "composition": {
+        "pokemon": 17,
+        "energy": 10,
+        "trainer": 33
+      },
+      "counts": [
+        {
+          "id": 2,
+          "count": 4
+        },
+        {
+          "id": 5,
+          "count": 4
+        },
+        {
+          "id": 7,
+          "count": 2
+        },
+        {
+          "id": 112,
+          "count": 2
+        },
+        {
+          "id": 119,
+          "count": 4
+        },
+        {
+          "id": 120,
+          "count": 4
+        },
+        {
+          "id": 121,
+          "count": 3
+        },
+        {
+          "id": 140,
+          "count": 1
+        },
+        {
+          "id": 235,
+          "count": 2
+        },
+        {
+          "id": 1071,
+          "count": 1
+        },
+        {
+          "id": 1080,
+          "count": 1
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 2
+        },
+        {
+          "id": 1120,
+          "count": 3
+        },
+        {
+          "id": 1121,
+          "count": 4
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1197,
+          "count": 1
+        },
+        {
+          "id": 1198,
+          "count": 3
+        },
+        {
+          "id": 1213,
+          "count": 1
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1231,
+          "count": 1
+        },
+        {
+          "id": 1246,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_dragapult_0e0ed5618e68",
+      "name": "Kaggle July 11 Top-15 Dragapult ex 0e0ed5618e68",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "0e0ed5618e68",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85338470,
+          "max": 85359276
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 04:47:00.621000",
+          "end": "2026-07-11 07:33:03.996000"
+        },
+        "observed_player_decks": 15,
+        "observed_wins": 9,
+        "observed_win_rate": 0.6,
+        "elite_both_top15_player_decks": 4,
+        "elite_both_top15_wins": 1,
+        "elite_both_top15_win_rate": 0.25,
+        "representative_team": "youtube.com/@BigBugginnings",
+        "team_counts": [
+          {
+            "team_name": "youtube.com/@BigBugginnings",
+            "count": 15
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85338470",
+            "player_index": 1,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": false,
+            "create_time": "2026-07-11 04:47:00.621000",
+            "end_time": "2026-07-11 04:49:32.432000"
+          },
+          {
+            "episode_id": "85343657",
+            "player_index": 0,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": false,
+            "create_time": "2026-07-11 05:27:08.565000",
+            "end_time": "2026-07-11 05:29:51.019000"
+          },
+          {
+            "episode_id": "85343899",
+            "player_index": 1,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": false,
+            "create_time": "2026-07-11 05:27:08.863000",
+            "end_time": "2026-07-11 05:29:29.460000"
+          },
+          {
+            "episode_id": "85351704",
+            "player_index": 1,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": true,
+            "create_time": "2026-07-11 06:31:03.365000",
+            "end_time": "2026-07-11 06:33:42.815000"
+          },
+          {
+            "episode_id": "85351772",
+            "player_index": 0,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": true,
+            "create_time": "2026-07-11 06:31:03.438000",
+            "end_time": "2026-07-11 06:33:18.221000"
+          },
+          {
+            "episode_id": "85351778",
+            "player_index": 1,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": true,
+            "create_time": "2026-07-11 06:31:03.465000",
+            "end_time": "2026-07-11 06:33:27.262000"
+          },
+          {
+            "episode_id": "85352290",
+            "player_index": 0,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": true,
+            "create_time": "2026-07-11 06:34:58.128000",
+            "end_time": "2026-07-11 06:37:09.376000"
+          },
+          {
+            "episode_id": "85352788",
+            "player_index": 1,
+            "team_name": "youtube.com/@BigBugginnings",
+            "won": true,
+            "create_time": "2026-07-11 06:38:59.505000",
+            "end_time": "2026-07-11 06:41:10.641000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 10,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 23,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "dragapult",
+      "archetype_name": "Dragapult ex",
+      "composition": {
+        "pokemon": 20,
+        "energy": 9,
+        "trainer": 31
+      },
+      "counts": [
+        {
+          "id": 2,
+          "count": 3
+        },
+        {
+          "id": 5,
+          "count": 4
+        },
+        {
+          "id": 7,
+          "count": 2
+        },
+        {
+          "id": 66,
+          "count": 1
+        },
+        {
+          "id": 112,
+          "count": 2
+        },
+        {
+          "id": 119,
+          "count": 4
+        },
+        {
+          "id": 120,
+          "count": 4
+        },
+        {
+          "id": 121,
+          "count": 3
+        },
+        {
+          "id": 140,
+          "count": 1
+        },
+        {
+          "id": 235,
+          "count": 1
+        },
+        {
+          "id": 305,
+          "count": 2
+        },
+        {
+          "id": 306,
+          "count": 1
+        },
+        {
+          "id": 1071,
+          "count": 1
+        },
+        {
+          "id": 1079,
+          "count": 2
+        },
+        {
+          "id": 1080,
+          "count": 1
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 3
+        },
+        {
+          "id": 1121,
+          "count": 4
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1182,
+          "count": 3
+        },
+        {
+          "id": 1198,
+          "count": 3
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1240,
+          "count": 1
+        },
+        {
+          "id": 1260,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_dragapult_3fa371080cb8",
+      "name": "Kaggle July 11 Top-15 Dragapult ex 3fa371080cb8",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "3fa371080cb8",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85329253,
+          "max": 85354250
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 03:35:04.181000",
+          "end": "2026-07-11 06:56:01.631000"
+        },
+        "observed_player_decks": 12,
+        "observed_wins": 10,
+        "observed_win_rate": 0.8333,
+        "elite_both_top15_player_decks": 7,
+        "elite_both_top15_wins": 6,
+        "elite_both_top15_win_rate": 0.8571,
+        "representative_team": "ZETADIVISION",
+        "team_counts": [
+          {
+            "team_name": "ZETADIVISION",
+            "count": 12
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85329253",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": false,
+            "create_time": "2026-07-11 03:35:04.181000",
+            "end_time": "2026-07-11 03:38:00.110000"
+          },
+          {
+            "episode_id": "85329586",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 03:39:11.454000",
+            "end_time": "2026-07-11 03:42:03.419000"
+          },
+          {
+            "episode_id": "85335731",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 04:23:07.068000",
+            "end_time": "2026-07-11 04:25:45.785000"
+          },
+          {
+            "episode_id": "85340273",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 04:59:14.960000",
+            "end_time": "2026-07-11 05:01:37.134000"
+          },
+          {
+            "episode_id": "85342273",
+            "player_index": 0,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 05:15:11.621000",
+            "end_time": "2026-07-11 05:18:05.850000"
+          },
+          {
+            "episode_id": "85343657",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 05:27:08.565000",
+            "end_time": "2026-07-11 05:29:51.019000"
+          },
+          {
+            "episode_id": "85344173",
+            "player_index": 0,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 05:30:58.511000",
+            "end_time": "2026-07-11 05:33:37.288000"
+          },
+          {
+            "episode_id": "85345807",
+            "player_index": 1,
+            "team_name": "ZETADIVISION",
+            "won": true,
+            "create_time": "2026-07-11 05:42:59.859000",
+            "end_time": "2026-07-11 05:46:04.216000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 24,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "marnie_grimmsnarl",
+      "archetype_name": "Marnie's Grimmsnarl ex",
+      "composition": {
+        "pokemon": 18,
+        "energy": 10,
+        "trainer": 32
+      },
+      "counts": [
+        {
+          "id": 7,
+          "count": 10
+        },
+        {
+          "id": 104,
+          "count": 2
+        },
+        {
+          "id": 112,
+          "count": 4
+        },
+        {
+          "id": 122,
+          "count": 1
+        },
+        {
+          "id": 646,
+          "count": 4
+        },
+        {
+          "id": 647,
+          "count": 2
+        },
+        {
+          "id": 648,
+          "count": 3
+        },
+        {
+          "id": 860,
+          "count": 2
+        },
+        {
+          "id": 1079,
+          "count": 3
+        },
+        {
+          "id": 1080,
+          "count": 1
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1097,
+          "count": 3
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1197,
+          "count": 2
+        },
+        {
+          "id": 1219,
+          "count": 4
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1231,
+          "count": 3
+        },
+        {
+          "id": 1259,
+          "count": 4
+        }
+      ],
+      "id": "kaggle_top15_20260711_marnie_grimmsnarl_7362d0522614",
+      "name": "Kaggle July 11 Top-15 Marnie's Grimmsnarl ex 7362d0522614",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "7362d0522614",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85337661,
+          "max": 85358562
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 04:39:06.533000",
+          "end": "2026-07-11 07:29:16.682000"
+        },
+        "observed_player_decks": 12,
+        "observed_wins": 3,
+        "observed_win_rate": 0.25,
+        "elite_both_top15_player_decks": 7,
+        "elite_both_top15_wins": 1,
+        "elite_both_top15_win_rate": 0.1429,
+        "representative_team": "payanotty",
+        "team_counts": [
+          {
+            "team_name": "payanotty",
+            "count": 12
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85337661",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": true,
+            "create_time": "2026-07-11 04:39:06.533000",
+            "end_time": "2026-07-11 04:41:33.844000"
+          },
+          {
+            "episode_id": "85338657",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": false,
+            "create_time": "2026-07-11 04:47:00.913000",
+            "end_time": "2026-07-11 04:49:45.306000"
+          },
+          {
+            "episode_id": "85338668",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": true,
+            "create_time": "2026-07-11 04:47:00.924000",
+            "end_time": "2026-07-11 04:49:10.700000"
+          },
+          {
+            "episode_id": "85339262",
+            "player_index": 1,
+            "team_name": "payanotty",
+            "won": false,
+            "create_time": "2026-07-11 04:51:08.883000",
+            "end_time": "2026-07-11 04:53:41.729000"
+          },
+          {
+            "episode_id": "85341287",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": false,
+            "create_time": "2026-07-11 05:07:07.493000",
+            "end_time": "2026-07-11 05:09:51.198000"
+          },
+          {
+            "episode_id": "85342745",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": true,
+            "create_time": "2026-07-11 05:18:57.912000",
+            "end_time": "2026-07-11 05:21:11.732000"
+          },
+          {
+            "episode_id": "85343356",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": false,
+            "create_time": "2026-07-11 05:23:05.475000",
+            "end_time": "2026-07-11 05:25:31.673000"
+          },
+          {
+            "episode_id": "85345726",
+            "player_index": 0,
+            "team_name": "payanotty",
+            "won": false,
+            "create_time": "2026-07-11 05:42:59.723000",
+            "end_time": "2026-07-11 05:45:10.683000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 11,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 18,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_kangaskhan_crustle",
+      "archetype_name": "Mega Kangaskhan ex / Crustle",
+      "composition": {
+        "pokemon": 13,
+        "energy": 13,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "id": 1,
+          "count": 1
+        },
+        {
+          "id": 11,
+          "count": 4
+        },
+        {
+          "id": 14,
+          "count": 4
+        },
+        {
+          "id": 18,
+          "count": 4
+        },
+        {
+          "id": 343,
+          "count": 1
+        },
+        {
+          "id": 344,
+          "count": 4
+        },
+        {
+          "id": 345,
+          "count": 4
+        },
+        {
+          "id": 756,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1087,
+          "count": 1
+        },
+        {
+          "id": 1122,
+          "count": 4
+        },
+        {
+          "id": 1123,
+          "count": 4
+        },
+        {
+          "id": 1147,
+          "count": 4
+        },
+        {
+          "id": 1159,
+          "count": 1
+        },
+        {
+          "id": 1182,
+          "count": 2
+        },
+        {
+          "id": 1197,
+          "count": 4
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1264,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_mega_kangaskhan_crustle_6f87e9d4949a",
+      "name": "Kaggle July 11 Top-15 Mega Kangaskhan ex / Crustle 6f87e9d4949a",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "6f87e9d4949a",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85329253,
+          "max": 85359209
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 03:35:04.181000",
+          "end": "2026-07-11 07:34:39.552000"
+        },
+        "observed_player_decks": 17,
+        "observed_wins": 11,
+        "observed_win_rate": 0.6471,
+        "elite_both_top15_player_decks": 17,
+        "elite_both_top15_wins": 11,
+        "elite_both_top15_win_rate": 0.6471,
+        "representative_team": "Budew",
+        "team_counts": [
+          {
+            "team_name": "Budew",
+            "count": 17
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85329253",
+            "player_index": 0,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 03:35:04.181000",
+            "end_time": "2026-07-11 03:38:00.110000"
+          },
+          {
+            "episode_id": "85343324",
+            "player_index": 0,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 05:23:05.419000",
+            "end_time": "2026-07-11 05:25:47.431000"
+          },
+          {
+            "episode_id": "85348377",
+            "player_index": 1,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 06:03:00.097000",
+            "end_time": "2026-07-11 06:05:36.720000"
+          },
+          {
+            "episode_id": "85355771",
+            "player_index": 1,
+            "team_name": "Budew",
+            "won": false,
+            "create_time": "2026-07-11 07:02:55.179000",
+            "end_time": "2026-07-11 07:05:48.768000"
+          },
+          {
+            "episode_id": "85356255",
+            "player_index": 1,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 07:06:54.165000",
+            "end_time": "2026-07-11 07:12:00.460000"
+          },
+          {
+            "episode_id": "85356260",
+            "player_index": 0,
+            "team_name": "Budew",
+            "won": false,
+            "create_time": "2026-07-11 07:06:54.169000",
+            "end_time": "2026-07-11 07:09:50.432000"
+          },
+          {
+            "episode_id": "85356263",
+            "player_index": 0,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 07:06:54.171000",
+            "end_time": "2026-07-11 07:12:30.603000"
+          },
+          {
+            "episode_id": "85356741",
+            "player_index": 1,
+            "team_name": "Budew",
+            "won": true,
+            "create_time": "2026-07-11 07:10:53.684000",
+            "end_time": "2026-07-11 07:16:41.053000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 9,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 19,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_kangaskhan_crustle",
+      "archetype_name": "Mega Kangaskhan ex / Crustle",
+      "composition": {
+        "pokemon": 10,
+        "energy": 13,
+        "trainer": 37
+      },
+      "counts": [
+        {
+          "id": 1,
+          "count": 1
+        },
+        {
+          "id": 11,
+          "count": 4
+        },
+        {
+          "id": 14,
+          "count": 4
+        },
+        {
+          "id": 18,
+          "count": 4
+        },
+        {
+          "id": 344,
+          "count": 3
+        },
+        {
+          "id": 345,
+          "count": 3
+        },
+        {
+          "id": 756,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1120,
+          "count": 4
+        },
+        {
+          "id": 1122,
+          "count": 4
+        },
+        {
+          "id": 1123,
+          "count": 4
+        },
+        {
+          "id": 1147,
+          "count": 4
+        },
+        {
+          "id": 1159,
+          "count": 1
+        },
+        {
+          "id": 1182,
+          "count": 2
+        },
+        {
+          "id": 1197,
+          "count": 4
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1264,
+          "count": 2
+        }
+      ],
+      "id": "kaggle_top15_20260711_mega_kangaskhan_crustle_808185b78ffe",
+      "name": "Kaggle July 11 Top-15 Mega Kangaskhan ex / Crustle 808185b78ffe",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "808185b78ffe",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85338470,
+          "max": 85356211
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 04:47:00.621000",
+          "end": "2026-07-11 07:09:03.681000"
+        },
+        "observed_player_decks": 12,
+        "observed_wins": 7,
+        "observed_win_rate": 0.5833,
+        "elite_both_top15_player_decks": 6,
+        "elite_both_top15_wins": 3,
+        "elite_both_top15_win_rate": 0.5,
+        "representative_team": "Legend Brothers",
+        "team_counts": [
+          {
+            "team_name": "Legend Brothers",
+            "count": 12
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85338470",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": true,
+            "create_time": "2026-07-11 04:47:00.621000",
+            "end_time": "2026-07-11 04:49:32.432000"
+          },
+          {
+            "episode_id": "85339210",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": true,
+            "create_time": "2026-07-11 04:51:08.807000",
+            "end_time": "2026-07-11 04:53:54.165000"
+          },
+          {
+            "episode_id": "85340705",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": false,
+            "create_time": "2026-07-11 05:03:08.971000",
+            "end_time": "2026-07-11 05:05:30.371000"
+          },
+          {
+            "episode_id": "85340751",
+            "player_index": 1,
+            "team_name": "Legend Brothers",
+            "won": true,
+            "create_time": "2026-07-11 05:03:09.024000",
+            "end_time": "2026-07-11 05:05:31.403000"
+          },
+          {
+            "episode_id": "85343022",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": false,
+            "create_time": "2026-07-11 05:23:05.028000",
+            "end_time": "2026-07-11 05:25:24.057000"
+          },
+          {
+            "episode_id": "85345832",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": true,
+            "create_time": "2026-07-11 05:42:59.904000",
+            "end_time": "2026-07-11 05:45:40.110000"
+          },
+          {
+            "episode_id": "85348380",
+            "player_index": 0,
+            "team_name": "Legend Brothers",
+            "won": false,
+            "create_time": "2026-07-11 06:03:00.100000",
+            "end_time": "2026-07-11 06:05:42.957000"
+          },
+          {
+            "episode_id": "85349891",
+            "player_index": 1,
+            "team_name": "Legend Brothers",
+            "won": false,
+            "create_time": "2026-07-11 06:14:59.681000",
+            "end_time": "2026-07-11 06:17:23.702000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 7,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 18,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_kangaskhan_crustle",
+      "archetype_name": "Mega Kangaskhan ex / Crustle",
+      "composition": {
+        "pokemon": 10,
+        "energy": 13,
+        "trainer": 37
+      },
+      "counts": [
+        {
+          "id": 1,
+          "count": 1
+        },
+        {
+          "id": 11,
+          "count": 4
+        },
+        {
+          "id": 14,
+          "count": 4
+        },
+        {
+          "id": 18,
+          "count": 4
+        },
+        {
+          "id": 344,
+          "count": 3
+        },
+        {
+          "id": 345,
+          "count": 3
+        },
+        {
+          "id": 756,
+          "count": 4
+        },
+        {
+          "id": 1086,
+          "count": 3
+        },
+        {
+          "id": 1087,
+          "count": 1
+        },
+        {
+          "id": 1121,
+          "count": 1
+        },
+        {
+          "id": 1122,
+          "count": 3
+        },
+        {
+          "id": 1123,
+          "count": 2
+        },
+        {
+          "id": 1147,
+          "count": 4
+        },
+        {
+          "id": 1159,
+          "count": 1
+        },
+        {
+          "id": 1161,
+          "count": 1
+        },
+        {
+          "id": 1182,
+          "count": 4
+        },
+        {
+          "id": 1186,
+          "count": 2
+        },
+        {
+          "id": 1197,
+          "count": 1
+        },
+        {
+          "id": 1204,
+          "count": 1
+        },
+        {
+          "id": 1219,
+          "count": 4
+        },
+        {
+          "id": 1225,
+          "count": 3
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1242,
+          "count": 1
+        },
+        {
+          "id": 1257,
+          "count": 1
+        }
+      ],
+      "id": "kaggle_top15_20260711_mega_kangaskhan_crustle_a3c0bb2839c6",
+      "name": "Kaggle July 11 Top-15 Mega Kangaskhan ex / Crustle a3c0bb2839c6",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "a3c0bb2839c6",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85343733,
+          "max": 85356803
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 05:27:08.667000",
+          "end": "2026-07-11 07:13:14.011000"
+        },
+        "observed_player_decks": 15,
+        "observed_wins": 10,
+        "observed_win_rate": 0.6667,
+        "elite_both_top15_player_decks": 6,
+        "elite_both_top15_wins": 4,
+        "elite_both_top15_win_rate": 0.6667,
+        "representative_team": "Ebi",
+        "team_counts": [
+          {
+            "team_name": "Ebi",
+            "count": 15
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85343733",
+            "player_index": 1,
+            "team_name": "Ebi",
+            "won": true,
+            "create_time": "2026-07-11 05:27:08.667000",
+            "end_time": "2026-07-11 05:29:31.187000"
+          },
+          {
+            "episode_id": "85344173",
+            "player_index": 1,
+            "team_name": "Ebi",
+            "won": false,
+            "create_time": "2026-07-11 05:30:58.511000",
+            "end_time": "2026-07-11 05:33:37.288000"
+          },
+          {
+            "episode_id": "85351262",
+            "player_index": 1,
+            "team_name": "Ebi",
+            "won": true,
+            "create_time": "2026-07-11 06:26:58.463000",
+            "end_time": "2026-07-11 06:29:35.268000"
+          },
+          {
+            "episode_id": "85352267",
+            "player_index": 0,
+            "team_name": "Ebi",
+            "won": false,
+            "create_time": "2026-07-11 06:34:58.100000",
+            "end_time": "2026-07-11 06:37:31.272000"
+          },
+          {
+            "episode_id": "85352382",
+            "player_index": 1,
+            "team_name": "Ebi",
+            "won": true,
+            "create_time": "2026-07-11 06:34:58.281000",
+            "end_time": "2026-07-11 06:37:37.639000"
+          },
+          {
+            "episode_id": "85352775",
+            "player_index": 0,
+            "team_name": "Ebi",
+            "won": false,
+            "create_time": "2026-07-11 06:38:59.492000",
+            "end_time": "2026-07-11 06:41:18.102000"
+          },
+          {
+            "episode_id": "85352843",
+            "player_index": 1,
+            "team_name": "Ebi",
+            "won": true,
+            "create_time": "2026-07-11 06:38:59.597000",
+            "end_time": "2026-07-11 06:41:22.702000"
+          },
+          {
+            "episode_id": "85353329",
+            "player_index": 0,
+            "team_name": "Ebi",
+            "won": true,
+            "create_time": "2026-07-11 06:43:08.714000",
+            "end_time": "2026-07-11 06:45:58.185000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 7,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 24,
+        "valid": true
+      }
+    },
+    {
+      "archetype": "mega_starmie",
+      "archetype_name": "Mega Starmie ex",
+      "composition": {
+        "pokemon": 13,
+        "energy": 13,
+        "trainer": 34
+      },
+      "counts": [
+        {
+          "id": 3,
+          "count": 9
+        },
+        {
+          "id": 17,
+          "count": 4
+        },
+        {
+          "id": 131,
+          "count": 2
+        },
+        {
+          "id": 132,
+          "count": 2
+        },
+        {
+          "id": 133,
+          "count": 2
+        },
+        {
+          "id": 1030,
+          "count": 4
+        },
+        {
+          "id": 1031,
+          "count": 3
+        },
+        {
+          "id": 1086,
+          "count": 4
+        },
+        {
+          "id": 1121,
+          "count": 4
+        },
+        {
+          "id": 1122,
+          "count": 3
+        },
+        {
+          "id": 1152,
+          "count": 4
+        },
+        {
+          "id": 1167,
+          "count": 1
+        },
+        {
+          "id": 1192,
+          "count": 3
+        },
+        {
+          "id": 1213,
+          "count": 3
+        },
+        {
+          "id": 1225,
+          "count": 4
+        },
+        {
+          "id": 1227,
+          "count": 4
+        },
+        {
+          "id": 1229,
+          "count": 4
+        }
+      ],
+      "id": "kaggle_top15_20260711_mega_starmie_9870485d0346",
+      "name": "Kaggle July 11 Top-15 Mega Starmie ex 9870485d0346",
+      "notes": "Exact 60-card signature extracted from the current Kaggle leaderboard replay sample. Metrics cover uses by selected top-15 teams and are not matchup-adjusted.",
+      "source": {
+        "type": "kaggle_replay_top_leaderboard_sample",
+        "competition": "pokemon-tcg-ai-battle",
+        "local_root": "artifacts/replays/kaggle/latest_20260711",
+        "audit_manifest": "artifacts/replays/kaggle/latest_20260711_audit/all_fetched_manifest.csv",
+        "exact_deck_signature_sha1_12": "9870485d0346",
+        "selection_date": "2026-07-11",
+        "selection_basis": "Current leaderboard top 15 teams; best public-score submission per team; up to 12 episodes per submission",
+        "leaderboard_cutoff": 15,
+        "leaderboard_score_range": {
+          "min": 1072.2,
+          "max": 1261.1
+        },
+        "episode_id_range": {
+          "min": 85311976,
+          "max": 85358167
+        },
+        "episode_time_range_utc": {
+          "start": "2026-07-11 01:23:14.284000",
+          "end": "2026-07-11 07:25:21.401000"
+        },
+        "observed_player_decks": 16,
+        "observed_wins": 8,
+        "observed_win_rate": 0.5,
+        "elite_both_top15_player_decks": 16,
+        "elite_both_top15_wins": 8,
+        "elite_both_top15_win_rate": 0.5,
+        "representative_team": "WinDecks",
+        "team_counts": [
+          {
+            "team_name": "WinDecks",
+            "count": 16
+          }
+        ],
+        "sample_episodes": [
+          {
+            "episode_id": "85311976",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": true,
+            "create_time": "2026-07-11 01:23:14.284000",
+            "end_time": "2026-07-11 01:25:40.857000"
+          },
+          {
+            "episode_id": "85335694",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": true,
+            "create_time": "2026-07-11 04:23:06.988000",
+            "end_time": "2026-07-11 04:26:00.891000"
+          },
+          {
+            "episode_id": "85338668",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": false,
+            "create_time": "2026-07-11 04:47:00.924000",
+            "end_time": "2026-07-11 04:49:10.700000"
+          },
+          {
+            "episode_id": "85340705",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": true,
+            "create_time": "2026-07-11 05:03:08.971000",
+            "end_time": "2026-07-11 05:05:30.371000"
+          },
+          {
+            "episode_id": "85344346",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": false,
+            "create_time": "2026-07-11 05:30:58.765000",
+            "end_time": "2026-07-11 05:33:09.438000"
+          },
+          {
+            "episode_id": "85344874",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": false,
+            "create_time": "2026-07-11 05:35:04.911000",
+            "end_time": "2026-07-11 05:37:14.681000"
+          },
+          {
+            "episode_id": "85345222",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": false,
+            "create_time": "2026-07-11 05:39:03.832000",
+            "end_time": "2026-07-11 05:41:37.178000"
+          },
+          {
+            "episode_id": "85345307",
+            "player_index": 1,
+            "team_name": "WinDecks",
+            "won": true,
+            "create_time": "2026-07-11 05:39:03.914000",
+            "end_time": "2026-07-11 05:42:58.835000"
+          }
+        ]
+      },
+      "validation": {
+        "ace_spec_count": 1,
+        "basic_pokemon_count": 6,
+        "card_count": 60,
+        "problems": [],
+        "unique_card_ids": 17,
+        "valid": true
+      }
     }
   ],
-  "generated_at": "2026-07-05",
+  "generated_at": "2026-07-12",
   "purpose": "Seed deck/archetype database for self-play opponent pools and in-game opponent deck inference.",
   "rejected_sources": [
     {

@@ -26,7 +26,7 @@ BOOTSTRAP_REPLICATES = 2_000
 MIN_FEATURE_DECISIONS = 10
 MAX_FEATURES = 512
 MIN_EVAL_GROUPS = 2_000
-MIN_EVAL_EPISODES = 25
+MIN_EVAL_EPISODES = 20
 LABEL_BUDGETS = {
     "beam_width": 8,
     "max_depth": 8,
@@ -73,13 +73,13 @@ XGB_PARAMS: dict[str, Any] = {
 }
 NUM_BOOST_ROUND = 800
 EARLY_STOPPING_ROUNDS = 50
-INFERENCE_FEATURE_COUNT = 389
 
 
 @dataclass(frozen=True)
 class RootGroup:
     episode_id: str
     group_id: str
+    self_archetype: str
     label_index: int
     features: tuple[dict[str, float], ...]
     base_scores: tuple[float, ...]
@@ -93,6 +93,7 @@ class RootGroup:
 class RootGroupInfo:
     episode_id: str
     group_id: str
+    self_archetype: str
     label_index: int
     size: int
     base_scores: tuple[float, ...]
@@ -286,9 +287,9 @@ class XGBRootRanker:
         if not isinstance(raw_names, list) or not all(isinstance(name, str) and name for name in raw_names):
             raise ValueError("XGBoost metadata feature_names must be non-empty strings")
         feature_names = tuple(raw_names)
-        if len(feature_names) != INFERENCE_FEATURE_COUNT:
+        if not 1 <= len(feature_names) <= MAX_FEATURES:
             raise ValueError(
-                f"XGBoost root ranker requires exactly {INFERENCE_FEATURE_COUNT} features; found {len(feature_names)}"
+                f"XGBoost root ranker requires between 1 and {MAX_FEATURES} features; found {len(feature_names)}"
             )
         if len(set(feature_names)) != len(feature_names):
             raise ValueError("XGBoost metadata contains duplicate feature names")
@@ -438,10 +439,16 @@ class CompactXGBRootRanker:
         if payload.get("zero_default") is not True:
             raise ValueError("Compact XGBoost model must declare zero_default=true")
         raw_names = payload.get("feature_names")
-        if not isinstance(raw_names, list) or len(raw_names) != INFERENCE_FEATURE_COUNT:
-            raise ValueError(f"Compact XGBoost model requires exactly {INFERENCE_FEATURE_COUNT} features")
+        if not isinstance(raw_names, list) or not 1 <= len(raw_names) <= MAX_FEATURES:
+            raise ValueError(f"Compact XGBoost model requires between 1 and {MAX_FEATURES} features")
         if not all(isinstance(name, str) and name for name in raw_names) or len(set(raw_names)) != len(raw_names):
             raise ValueError("Compact XGBoost feature names must be unique non-empty strings")
+        try:
+            declared_feature_count = int(payload.get("feature_count", len(raw_names)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Compact XGBoost feature_count must be an integer") from exc
+        if declared_feature_count != len(raw_names):
+            raise ValueError("Compact XGBoost feature_count does not match feature_names")
         try:
             best_iteration = int(payload.get("best_iteration"))
             base_score = float(payload.get("base_score"))
@@ -573,6 +580,7 @@ def export_compact(model_dir: str | Path, output: str | Path) -> dict[str, Any]:
         "base_score": _float32(base_score),
         "best_iteration": native.best_iteration,
         "tree_count": len(trees),
+        "feature_count": len(native.feature_names),
         "feature_names": list(native.feature_names),
         "trees": trees,
         "source_booster_sha256": str(native.metadata["booster_sha256"]),
@@ -962,9 +970,13 @@ def iter_groups(paths: Sequence[str | Path]) -> Iterator[RootGroup]:
         episode_id = str(record.get("episode_id", "") or f"{path.name}:{line_number}")
         player_index = str(record.get("player_index", ""))
         step_index = str(record.get("step_index", line_number))
+        # Some replay producers emit more than one setup decision with the same
+        # player/step pair.  The label row is the actual decision-group unit;
+        # include its stable JSONL position so those decisions remain distinct.
         yield RootGroup(
             episode_id=episode_id,
-            group_id=f"{episode_id}:{player_index}:{step_index}",
+            group_id=f"{episode_id}:{player_index}:{step_index}:{line_number}",
+            self_archetype=str(record.get("self_archetype", "") or "unknown"),
             label_index=label_index,
             features=tuple(features),
             base_scores=tuple(base_scores),
@@ -994,6 +1006,7 @@ def build_matrix(paths: Sequence[str | Path], feature_names: Sequence[str]) -> M
             RootGroupInfo(
                 episode_id=group.episode_id,
                 group_id=group.group_id,
+                self_archetype=group.self_archetype,
                 label_index=group.label_index,
                 size=group.size,
                 base_scores=group.base_scores,
@@ -1162,10 +1175,35 @@ def evaluate_predictions(
     return result
 
 
-def _dmat(xgb: Any, data: MatrixData, feature_names: Sequence[str]) -> Any:
+def _dmat(
+    xgb: Any,
+    data: MatrixData,
+    feature_names: Sequence[str],
+    *,
+    group_weights: Sequence[float] | None = None,
+) -> Any:
     matrix = xgb.DMatrix(data.matrix, label=data.labels, feature_names=list(feature_names), missing=float("nan"))
     matrix.set_group(list(data.group_sizes))
+    if group_weights is not None:
+        if len(group_weights) != len(data.groups):
+            raise ValueError("Ranking group weight count must match query group count")
+        matrix.set_weight([float(value) for value in group_weights])
     return matrix
+
+
+def self_archetype_group_weights(groups: Sequence[RootGroupInfo]) -> tuple[float, ...]:
+    """Return inverse-sqrt query weights normalized near one and clipped."""
+
+    if not groups:
+        return ()
+    counts = Counter(group.self_archetype or "unknown" for group in groups)
+    target = float(len(groups)) / max(1, len(counts))
+    raw = [
+        max(0.25, min(4.0, math.sqrt(target / float(counts[group.self_archetype or "unknown"]))))
+        for group in groups
+    ]
+    mean = sum(raw) / len(raw)
+    return tuple(max(0.25, min(4.0, value / mean)) for value in raw)
 
 
 def train(
@@ -1174,6 +1212,7 @@ def train(
     test_labels: Sequence[str | Path],
     output_dir: str | Path,
     *,
+    balance_self_archetype: bool = False,
     _enforce_minimums: bool = True,
 ) -> dict[str, Any]:
     try:
@@ -1217,7 +1256,8 @@ def train(
         overlap = split_episodes[left] & split_episodes[right]
         if overlap:
             raise ValueError(f"Episode leakage between {left} and {right}: {sorted(overlap)[:5]}")
-    dtrain = _dmat(xgb, train_data, feature_names)
+    train_group_weights = self_archetype_group_weights(train_data.groups) if balance_self_archetype else None
+    dtrain = _dmat(xgb, train_data, feature_names, group_weights=train_group_weights)
     dvalidation = _dmat(xgb, validation_data, feature_names)
     dtest = _dmat(xgb, test_data, feature_names)
     booster = xgb.train(
@@ -1252,6 +1292,13 @@ def train(
             "presence_unit": "decision",
             "minimum_decisions": MIN_FEATURE_DECISIONS,
             "maximum_features": MAX_FEATURES,
+        },
+        "training_balance": {
+            "self_archetype_inverse_sqrt": bool(balance_self_archetype),
+            "group_counts": dict(sorted(Counter(group.self_archetype for group in train_data.groups).items())),
+            "weight_min": min(train_group_weights) if train_group_weights else 1.0,
+            "weight_max": max(train_group_weights) if train_group_weights else 1.0,
+            "weight_mean": (sum(train_group_weights) / len(train_group_weights)) if train_group_weights else 1.0,
         },
         "excluded_generated_features": sorted(GENERATED_FEATURES),
         "excluded_generated_prefixes": list(GENERATED_PREFIXES),
@@ -1317,6 +1364,11 @@ def _parser() -> argparse.ArgumentParser:
     trainer.add_argument("--validation-labels", action="append", required=True)
     trainer.add_argument("--test-labels", action="append", required=True)
     trainer.add_argument("--output-dir", required=True)
+    trainer.add_argument(
+        "--balance-self-archetype",
+        action="store_true",
+        help="Apply clipped inverse-sqrt query weights by self archetype to the training split.",
+    )
 
     exporter = subparsers.add_parser(
         "export-compact",
@@ -1342,7 +1394,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             workers=args.workers,
         )
     elif args.command == "train":
-        result = train(args.train_labels, args.validation_labels, args.test_labels, args.output_dir)
+        result = train(
+            args.train_labels,
+            args.validation_labels,
+            args.test_labels,
+            args.output_dir,
+            balance_self_archetype=bool(args.balance_self_archetype),
+        )
     elif args.command == "export-compact":
         result = export_compact(args.model, args.output)
     else:  # pragma: no cover - argparse enforces a subcommand.

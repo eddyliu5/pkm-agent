@@ -64,9 +64,9 @@ _KADABRA_BONUS = 400
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(globals().get("__file__", "main.py")))
-DECK_PATH = os.path.join(BASE_DIR, "lucario_deck.csv")
+DECK_PATH = os.path.join(BASE_DIR, "deck.csv")
 if not os.path.exists(DECK_PATH):
-    DECK_PATH = "/kaggle_simulations/agent/lucario_deck.csv"
+    DECK_PATH = "/kaggle_simulations/agent/deck.csv"
 with open(DECK_PATH, "r", encoding="utf-8") as f:
     my_deck = [int(line) for line in f.read().splitlines() if line.strip()]
 

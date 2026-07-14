@@ -10,7 +10,7 @@ EVAL_WORKERS="${EVAL_WORKERS:-1}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 
 PREVIOUS_AGENT="${PREVIOUS_AGENT:-sequence}"
-CURRENT_AGENT="${CURRENT_AGENT:-sequence-mlp:artifacts/checkpoints/top_replay_mlp_diagnostic_e10/best.json}"
+CURRENT_AGENT="${CURRENT_AGENT:-sequence-mlp:artifacts/checkpoints/mlp_depth_sweep_20260708T083117Z/four_192_128_64_32/best.pt}"
 
 OUT_ROOT="${OUT_ROOT:-artifacts/baseline/compare_25_${RUN_ID}}"
 

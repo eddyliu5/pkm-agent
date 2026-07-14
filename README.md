@@ -240,7 +240,7 @@ Evaluate an MLP checkpoint on top of learned sequence weights. This is unnecessa
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.eval \
-  --agent sequence-mlp:artifacts/checkpoints/mlp_ranker_high_elo/best.pt,artifacts/checkpoints/replay_pretrain_top_sample/best.json \
+  --agent sequence-mlp:artifacts/checkpoints/mlp_depth_sweep_20260708T083117Z/four_192_128_64_32/best.pt,artifacts/versions/sequence_starmie_froslass/weights.json \
   --opponent heuristic \
   --games 100
 ```
@@ -255,8 +255,8 @@ Package a combined sequence-weight plus MLP ablation only after it beats the str
 
 ```bash
 ./.venv/bin/python -m pokemon_agent.submission \
-  --weights artifacts/checkpoints/replay_pretrain_top_sample/best.json \
-  --mlp-model artifacts/checkpoints/mlp_ranker_high_elo/best.pt \
+  --weights artifacts/versions/sequence_starmie_froslass/weights.json \
+  --mlp-model artifacts/checkpoints/mlp_depth_sweep_20260708T083117Z/four_192_128_64_32/best.pt \
   --output artifacts/submission/mlp_sequence_submission.tar.gz
 ```
 
