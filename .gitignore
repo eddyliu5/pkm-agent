@@ -43,4 +43,6 @@ data/kaggle_replays/
 pkm-agent_replays/
 
 # Local development notes
+agent.md
+loop.md
 next_steps.md
